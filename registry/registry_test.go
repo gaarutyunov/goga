@@ -464,6 +464,9 @@ func TestConcurrentRegisterOpenAndNames(t *testing.T) {
 			if i%8 == 0 {
 				name = "http"
 			}
+			// Discarded on purpose: the colliding names are *expected* to fail
+			// with a duplicate-name error, and which goroutine wins the race is
+			// not defined. What this test asserts is the end state, below.
 			_ = reg.Register(name, newSSE)
 		}()
 
@@ -474,7 +477,13 @@ func TestConcurrentRegisterOpenAndNames(t *testing.T) {
 
 		go func() {
 			defer wg.Done()
-			_, _ = reg.Open[transport](t.Context(), "http", registry.Settings{"address": "a:1"})
+			// "http" is registered before the loop starts and the colliding
+			// registrations above all fail, so this Open must succeed however
+			// the race resolves — assert that rather than discarding it.
+			// assert, not require: require would call t.FailNow from a
+			// non-test goroutine, which is not allowed.
+			_, err := reg.Open[transport](t.Context(), "http", registry.Settings{"address": "a:1"})
+			assert.NoError(t, err)
 		}()
 	}
 	wg.Wait()
