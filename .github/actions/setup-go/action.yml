@@ -1,0 +1,75 @@
+# goga — reusable "set up Go" composite action.
+#
+# Downstream projects pin this as:
+#   uses: gaarutyunov/goga/.github/actions/setup-go@<ref>
+#
+# Deliberately thin: it wraps actions/setup-go and adds one opinion — with no
+# `go-version` input it derives the version from the repository's own go.mod, so
+# the toolchain used by CI can never drift from the toolchain the module
+# declares. goga's go.mod says `go 1.27` with no `toolchain` directive; go1.27.0
+# is a stock GA release, so no release-candidate handling is needed here.
+name: Setup Go
+description: >-
+  Install a Go toolchain (defaulting to the version declared in the repository's
+  go.mod) with module and build caching enabled.
+
+inputs:
+  go-version:
+    description: >-
+      Explicit Go version (semver spec or range, e.g. "1.27.0" or "1.27.x").
+      Leave empty — the default — to derive the version from go.mod instead.
+    required: false
+    default: ""
+  go-version-file:
+    description: >-
+      File to derive the Go version from when `go-version` is empty. Defaults to
+      go.mod; set it to go.work for a multi-module workspace.
+    required: false
+    default: go.mod
+  cache:
+    description: Enable module/build caching keyed on the dependency file.
+    required: false
+    default: "true"
+  cache-dependency-path:
+    description: >-
+      Path (or newline-separated paths) to the dependency file used as the cache
+      key. Empty lets actions/setup-go find go.sum itself.
+    required: false
+    default: ""
+  check-latest:
+    description: >-
+      Always check for the newest patch release satisfying the version spec
+      rather than accepting a version preinstalled on the runner.
+    required: false
+    default: "false"
+
+outputs:
+  go-version:
+    description: The Go version actually installed.
+    value: ${{ steps.setup.outputs.go-version }}
+  cache-hit:
+    description: Whether the module/build cache was restored.
+    value: ${{ steps.setup.outputs.cache-hit }}
+
+runs:
+  using: composite
+  steps:
+    # SHA-pinned, per supply-chain policy: a tag is mutable, a commit is not.
+    # The trailing comment records which release the SHA corresponds to.
+    - name: Install Go
+      id: setup
+      uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      with:
+        # Exactly one of these takes effect: when `go-version` is empty,
+        # actions/setup-go falls through to `go-version-file`.
+        go-version: ${{ inputs.go-version }}
+        go-version-file: ${{ inputs.go-version == '' && inputs.go-version-file || '' }}
+        cache: ${{ inputs.cache }}
+        cache-dependency-path: ${{ inputs.cache-dependency-path }}
+        check-latest: ${{ inputs.check-latest }}
+
+    - name: Report resolved toolchain
+      shell: bash
+      run: |
+        echo "Go ${{ steps.setup.outputs.go-version }} ($(go env GOOS)/$(go env GOARCH))"
+        go version

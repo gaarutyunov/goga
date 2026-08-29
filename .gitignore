@@ -1,0 +1,32 @@
+# Build output
+/dist/
+/bin/
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+
+# Coverage and profiling artifacts
+coverage.out
+coverage.html
+*.prof
+*.pprof
+
+# Go workspace files — machine-local by definition
+go.work
+go.work.sum
+
+# Editors
+/.idea/
+/.vscode/
+*.swp
+*~
+
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# Local environment overrides
+.env
+.env.local

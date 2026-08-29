@@ -1,0 +1,246 @@
+# goga — reusable "test a Go module" composite action.
+#
+# Downstream projects pin this as:
+#   uses: gaarutyunov/goga/.github/actions/go-test@<ref>
+#
+# Opinions baked in, because they are the ones people forget:
+#   -race            — data races are the bugs Go tests are uniquely good at
+#                      catching, and only with this flag.
+#   -covermode=atomic— the only coverage mode that is correct under -race.
+#   -json            — machine-readable output, turned into a GitHub step summary
+#                      so a failure is readable without expanding the log.
+name: Go test
+description: >-
+  Run `go test` with the race detector and atomic coverage, render a pass/fail/
+  skip summary into the job summary, and upload the coverage profile. Assumes a
+  Go toolchain is already on PATH — run the companion `setup-go` action first.
+
+inputs:
+  packages:
+    description: Package pattern to test.
+    required: false
+    default: ./...
+  build-tags:
+    description: >-
+      Comma-separated build tags. As in the `go-lint` action, code behind a build
+      constraint is invisible to the default build — name the tag here or those
+      packages are silently never tested.
+    required: false
+    default: ""
+  coverage-file:
+    description: Path of the coverage profile to write, relative to working-directory.
+    required: false
+    default: coverage.out
+  working-directory:
+    description: Directory to run the tests in, relative to the repository root.
+    required: false
+    default: "."
+  args:
+    description: Extra flags appended to the `go test` invocation (e.g. -count=1).
+    required: false
+    default: ""
+  upload-artifact:
+    description: Upload the coverage profile as a workflow artifact.
+    required: false
+    default: "true"
+  artifact-name:
+    description: >-
+      Name of the coverage artifact. Must be unique within a workflow run, so a
+      matrix build has to vary it (e.g. coverage-${{ matrix.os }}).
+    required: false
+    default: coverage
+
+outputs:
+  coverage-percent:
+    description: Total statement coverage, as reported by `go tool cover -func`.
+    value: ${{ steps.cover.outputs.percent }}
+  tests-passed:
+    description: Number of tests that passed.
+    value: ${{ steps.test.outputs.passed }}
+  tests-failed:
+    description: Number of tests that failed.
+    value: ${{ steps.test.outputs.failed }}
+
+runs:
+  using: composite
+  steps:
+    - name: Run tests
+      id: test
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      # Inputs travel through env rather than being interpolated into the script
+      # body: a `${{ }}` expansion inside `run:` is a script-injection hole when
+      # the value is attacker-controlled (a branch name, a PR title).
+      env:
+        GOGA_PACKAGES: ${{ inputs.packages }}
+        GOGA_BUILD_TAGS: ${{ inputs.build-tags }}
+        GOGA_COVERAGE_FILE: ${{ inputs.coverage-file }}
+        GOGA_EXTRA_ARGS: ${{ inputs.args }}
+      run: |
+        # GitHub invokes `shell: bash` as `bash -eo pipefail`. -e has to go:
+        # a failing test must still reach the summary and artifact steps below.
+        set +e
+        set -uo pipefail
+
+        # Empty-safe -tags: a bare `-tags=` is rejected by some toolchains.
+        tagflag=()
+        if [ -n "$GOGA_BUILD_TAGS" ]; then
+          tagflag=("-tags=$GOGA_BUILD_TAGS")
+        fi
+        extra=()
+        if [ -n "$GOGA_EXTRA_ARGS" ]; then
+          # Word-split deliberately: `args` is a flag list, not a single value.
+          read -r -a extra <<< "$GOGA_EXTRA_ARGS"
+        fi
+
+        events="$RUNNER_TEMP/go-test-events.json"
+
+        # Output goes to a file rather than through a pipe so that $? is go
+        # test's own exit status, not the parser's. The human-readable rendering
+        # is produced below from the same JSON, which keeps the log clean.
+        set -x
+        go test "${tagflag[@]}" \
+          -race \
+          -covermode=atomic \
+          -coverprofile="$GOGA_COVERAGE_FILE" \
+          -json \
+          "${extra[@]}" \
+          "$GOGA_PACKAGES" > "$events"
+        status=$?
+        set +x
+
+        # python3 is preinstalled on every GitHub-hosted runner; the script uses
+        # nothing beyond the standard library, so there is no extra dependency
+        # to install (no gotestsum, no jq).
+        python3 - "$events" <<'PY'
+        import json, os, sys
+        from collections import Counter
+
+        counts = Counter()
+        failures = []          # (package, test)
+        output = {}            # (package, test) -> [lines]
+        build_errors = []
+
+        with open(sys.argv[1], encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line or not line.startswith("{"):
+                    # A build failure can emit plain text before any JSON event.
+                    if line:
+                        build_errors.append(line)
+                    continue
+                try:
+                    ev = json.loads(line)
+                except json.JSONDecodeError:
+                    build_errors.append(line)
+                    continue
+
+                action = ev.get("Action")
+                pkg = ev.get("Package", "")
+                test = ev.get("Test")
+
+                if action == "output" and test:
+                    output.setdefault((pkg, test), []).append(ev.get("Output", ""))
+                if test is None:
+                    # Package-level event; not a test result.
+                    continue
+                if action in ("pass", "fail", "skip"):
+                    counts[action] += 1
+                    if action == "fail":
+                        failures.append((pkg, test))
+
+        total = counts["pass"] + counts["fail"] + counts["skip"]
+        icon = "❌" if (counts["fail"] or build_errors) else "✅"
+
+        lines = [
+            f"## {icon} Go test",
+            "",
+            "| Result | Count |",
+            "| --- | ---: |",
+            f"| Passed | {counts['pass']} |",
+            f"| Failed | {counts['fail']} |",
+            f"| Skipped | {counts['skip']} |",
+            f"| **Total** | **{total}** |",
+            "",
+        ]
+
+        if build_errors:
+            lines += [
+                "### Build / setup errors",
+                "",
+                "```",
+                *build_errors[:80],
+                "```",
+                "",
+            ]
+
+        if failures:
+            lines.append("### Failures")
+            lines.append("")
+            for pkg, test in failures:
+                lines.append(f"<details><summary><code>{pkg}</code> — <code>{test}</code></summary>")
+                lines.append("")
+                lines.append("```")
+                # Tail the output: a failing table-driven test can be very long.
+                lines.extend(l.rstrip("\n") for l in output.get((pkg, test), [])[-60:])
+                lines.append("```")
+                lines.append("")
+                lines.append("</details>")
+                lines.append("")
+
+        summary = os.environ.get("GITHUB_STEP_SUMMARY")
+        if summary:
+            with open(summary, "a", encoding="utf-8") as fh:
+                fh.write("\n".join(lines) + "\n")
+
+        # Same information on stdout, so the log alone is enough to triage.
+        print(f"tests: {counts['pass']} passed, {counts['fail']} failed, {counts['skip']} skipped")
+        for pkg, test in failures:
+            print(f"::error::FAIL {pkg} {test}")
+            for l in output.get((pkg, test), [])[-40:]:
+                sys.stdout.write(l)
+
+        out = os.environ.get("GITHUB_OUTPUT")
+        if out:
+            with open(out, "a", encoding="utf-8") as fh:
+                fh.write(f"passed={counts['pass']}\n")
+                fh.write(f"failed={counts['fail']}\n")
+                fh.write(f"skipped={counts['skip']}\n")
+        PY
+
+        exit $status
+
+    - name: Coverage total
+      id: cover
+      # Runs even on failure so a red build still reports where coverage stood.
+      if: always()
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        GOGA_COVERAGE_FILE: ${{ inputs.coverage-file }}
+      run: |
+        set +e
+        set -uo pipefail
+        if [ ! -s "$GOGA_COVERAGE_FILE" ]; then
+          echo "No coverage profile at $GOGA_COVERAGE_FILE — skipping."
+          echo "percent=" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        total="$(go tool cover -func="$GOGA_COVERAGE_FILE" | tail -n 1 | awk '{print $NF}')"
+        echo "total coverage: $total"
+        echo "percent=$total" >> "$GITHUB_OUTPUT"
+        {
+          echo ""
+          echo "**Total coverage:** $total"
+        } >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Upload coverage profile
+      if: always() && inputs.upload-artifact == 'true'
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ inputs.working-directory }}/${{ inputs.coverage-file }}
+        # A missing profile means the build failed before any test ran; warn
+        # rather than compounding the failure with an artifact error.
+        if-no-files-found: warn
+        retention-days: 7
