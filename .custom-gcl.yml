@@ -11,7 +11,7 @@
 #
 #     golangci-lint custom
 #
-# which writes ./goga-gcl. Then run `./goga-gcl run ./...` with the
+# which writes ./bin/goga-gcl. Then run `./bin/goga-gcl run ./...` with the
 # `linters.settings.custom.goga` block in .golangci.yml uncommented — the stock
 # binary cannot load this plugin, which is why that block ships commented out.
 #
@@ -20,7 +20,11 @@
 version: v2.13.2
 
 name: goga-gcl
-destination: .
+# bin/ rather than the repo root: .gitignore already excludes /bin/, so the
+# 47 MB binary this produces cannot be committed by accident. Adding a new
+# ignore entry for an artifact an existing one already covers is the kind of
+# duplication that later disagrees with itself.
+destination: bin
 
 plugins:
   # `path` rather than `version`: goga's analyzers live in this repository, so

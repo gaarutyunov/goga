@@ -254,7 +254,8 @@ func TestAdapterOpenAppliesOptionsOnTopOfRawConfig(t *testing.T) {
 			tr, err := http.Open(t.Context(), tt.raw, tt.opts...)
 			require.NoError(t, err)
 
-			got := tr.(*httpTransport)
+			got, ok := tr.(*httpTransport)
+			require.True(t, ok, "Open returned %T, want *httpTransport", tr)
 			assert.Equal(t, tt.wantAddr, got.addr)
 			assert.Equal(t, tt.wantRetries, got.retries)
 		})
@@ -284,7 +285,9 @@ func TestAdapterOpenAcceptsItsOwnOption(t *testing.T) {
 
 	tr, err := http.Open(t.Context(), nil, withAddr("only-via-option:1"))
 	require.NoError(t, err)
-	assert.Equal(t, "only-via-option:1", tr.(*httpTransport).addr)
+	got, ok := tr.(*httpTransport)
+	require.True(t, ok, "Open returned %T, want *httpTransport", tr)
+	assert.Equal(t, "only-via-option:1", got.addr)
 }
 
 func TestAdapterOptionIsInterchangeableWithGogaOption(t *testing.T) {
@@ -334,7 +337,8 @@ func TestSettingsDecodeHonoursKoanfTags(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	got := tr.(*httpTransport)
+	got, ok := tr.(*httpTransport)
+	require.True(t, ok, "Open returned %T, want *httpTransport", tr)
 	assert.Equal(t, "tagged:1234", got.addr, "the koanf tag, not the field name, selects the key")
 	assert.Equal(t, 5, got.retries)
 }
@@ -492,7 +496,11 @@ func TestConcurrentAdapterOpen(t *testing.T) {
 			defer wg.Done()
 			tr, err := http.Open(t.Context(), registry.Settings{"address": "a:1"}, withRetries(i))
 			assert.NoError(t, err)
-			assert.Equal(t, i, tr.(*httpTransport).retries, "settings must not be shared between opens")
+			// assert, not require: require would call t.FailNow from a
+			// non-test goroutine, which is not allowed.
+			if got, ok := tr.(*httpTransport); assert.True(t, ok) {
+				assert.Equal(t, i, got.retries, "settings must not be shared between opens")
+			}
 		}()
 	}
 	wg.Wait()

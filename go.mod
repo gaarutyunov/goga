@@ -2,7 +2,11 @@ module github.com/gaarutyunov/goga
 
 go 1.27
 
-require github.com/stretchr/testify v1.12.1
+require (
+	github.com/golangci/plugin-module-register v0.1.2
+	github.com/stretchr/testify v1.12.1
+	golang.org/x/tools v0.49.0
+)
 
 require (
 	buf.build/gen/go/bufbuild/bufplugin/protocolbuffers/go v1.36.11-20260626152828-968bf0468096.1 // indirect
@@ -65,7 +69,6 @@ require (
 	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
 	github.com/golang-sql/civil v0.0.0-20220223132316-b832511892a9 // indirect
 	github.com/golang-sql/sqlexp v0.1.0 // indirect
-	github.com/golangci/plugin-module-register v0.1.2 // indirect
 	github.com/google/cel-go v0.29.2 // indirect
 	github.com/google/go-containerregistry v0.21.7 // indirect
 	github.com/google/subcommands v1.2.0 // indirect
@@ -159,7 +162,6 @@ require (
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/term v0.45.0 // indirect
 	golang.org/x/text v0.41.0 // indirect
-	golang.org/x/tools v0.49.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260825221802-da73d73af1c5 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260819154853-08b0e4226688 // indirect
 	google.golang.org/grpc v1.82.1 // indirect

@@ -99,6 +99,10 @@ func (e *DuplicateNameError) Error() string {
 	return fmt.Sprintf("goga/registry: register %q: name already registered for port %s", e.Name, typeName(e.Port))
 }
 
+// Is reports whether target is [ErrDuplicateName], so that a caller can branch
+// on the condition with errors.Is without naming this type, and reach for the
+// type with errors.As only when it wants the [DuplicateNameError.Name] and
+// [DuplicateNameError.Port] fields.
 func (e *DuplicateNameError) Is(target error) bool { return target == ErrDuplicateName }
 
 // UnknownNameError is returned when no adapter is registered under the
@@ -121,6 +125,11 @@ func (e *UnknownNameError) Error() string {
 	return fmt.Sprintf("goga/registry: no adapter %q registered for port %s (%s)", e.Name, typeName(e.Port), known)
 }
 
+// Is reports whether target is [ErrUnknownName], so that a caller can branch on
+// the condition with errors.Is without naming this type, and reach for the type
+// with errors.As only when it wants [UnknownNameError.Registered] — the list of
+// names that were available, which is what turns "unknown adapter" into a
+// message a user can act on.
 func (e *UnknownNameError) Is(target error) bool { return target == ErrUnknownName }
 
 // PortMismatchError is returned when an adapter exists under the requested name
@@ -144,6 +153,10 @@ func (e *PortMismatchError) Error() string {
 		e.Name, typeName(e.Registered), typeName(e.Requested))
 }
 
+// Is reports whether target is [ErrPortMismatch], so that a caller can branch on
+// the condition with errors.Is without naming this type, and reach for the type
+// with errors.As only when it wants to report the two ports involved —
+// [PortMismatchError.Registered] and [PortMismatchError.Requested].
 func (e *PortMismatchError) Is(target error) bool { return target == ErrPortMismatch }
 
 // typeName renders a port for an error message. reflect.Type is used rather
@@ -219,7 +232,17 @@ func (r *Registry) Register[P any, S any](name string, ctor func(context.Context
 			if err != nil {
 				return err
 			}
-			*(sink.(*P)) = p
+			// sink is a *P whenever [Registry.Open] has compared its own P
+			// against e.port first, which is the only path that reaches here.
+			// The check costs two lines and turns a future violation of that
+			// invariant into a wrapped error naming both types, rather than a
+			// panic from inside a closure with no name on it.
+			out, ok := sink.(*P)
+			if !ok {
+				return fmt.Errorf("result sink is %s, want %s: the port check before open was skipped",
+					typeName(reflect.TypeOf(sink)), typeName(reflect.TypeFor[*P]()))
+			}
+			*out = p
 			return nil
 		},
 	}

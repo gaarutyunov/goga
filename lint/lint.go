@@ -82,11 +82,15 @@ import (
 	"golang.org/x/tools/go/analysis"
 )
 
-// Name is the name golangci-lint knows this plugin by. It is the key under
-// linters.settings.custom in .golangci.yml and the name reported alongside
-// every diagnostic, which is why each analyzer also prefixes its own message
-// with its own name: golangci-lint attributes a finding to the plugin, not to
-// the analyzer inside it.
+// Name is the name golangci-lint knows this plugin by: the key under
+// linters.settings.custom in .golangci.yml, and the linter name suffixed to
+// every finding as "(goga)".
+//
+// An analyzer here does NOT prefix its own message with its own name.
+// golangci-lint already renders a plugin finding as
+// "<analyzer>: <message> (<plugin>)", so a self-prefix produces
+// "gogalayout: gogalayout: …". Both halves of the attribution are already
+// there — which analyzer fired, and which plugin it came from.
 const Name = "goga"
 
 func init() {

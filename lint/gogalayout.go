@@ -106,7 +106,7 @@ func (c *layoutChecker) run(pass *analysis.Pass) (any, error) {
 	// the only position an editor can take the reader to.
 	for _, file := range pass.Files {
 		pass.Reportf(file.Name.Pos(),
-			"gogalayout: package %q lives inside %q; goga's own code is laid out flat — no pkg/ and no internal/ directories — so move it to a top-level package under %q",
+			"package %q lives inside %q; goga's own code is laid out flat — no pkg/ and no internal/ directories — so move it to a top-level package under %q",
 			pass.Pkg.Path(), segment+"/", c.modulePrefix)
 	}
 
