@@ -1,0 +1,32 @@
+# Build descriptor for goga's own golangci-lint binary.
+#
+# `golangci-lint custom` reads this file and compiles a new binary with the
+# plugins below linked in. That compile step is the reason goga/lint is a
+# module plugin rather than a Go `plugin` .so: the .so form has to be built
+# with byte-identical toolchain and dependency versions to the binary loading
+# it, which is unmaintainable across contributors and CI. A module plugin is
+# just a Go import.
+#
+# Build it with:
+#
+#     golangci-lint custom
+#
+# which writes ./goga-gcl. Then run `./goga-gcl run ./...` with the
+# `linters.settings.custom.goga` block in .golangci.yml uncommented — the stock
+# binary cannot load this plugin, which is why that block ships commented out.
+#
+# Keep `version` in step with the golangci-lint the project installs; the
+# plugin is compiled against it.
+version: v2.13.2
+
+name: goga-gcl
+destination: .
+
+plugins:
+  # `path` rather than `version`: goga's analyzers live in this repository, so
+  # the plugin is the module being linted. A downstream project adopting these
+  # rules replaces `path` with `version: v0.x.y` and gets the same analyzers
+  # from the proxy.
+  - module: github.com/gaarutyunov/goga
+    import: github.com/gaarutyunov/goga/lint
+    path: .

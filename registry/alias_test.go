@@ -68,7 +68,10 @@ func TestExportedAliasIsNameableWithoutNamingSettings(t *testing.T) {
 	pgx, err := reg.Provide("pgx", newPool)
 	require.NoError(t, err)
 
-	// The handle assigns to the alias, which is the same type.
+	// The handle assigns to the alias, which is the same type. The explicit
+	// type is the assertion: inferring it would prove nothing, because the
+	// line would still compile if PgxAdapter became a separate declaration.
+	//nolint:staticcheck // ST1023: the explicit type is the compile-time check.
 	var handle PgxAdapter = pgx
 	assert.Equal(t, "pgx", handle.Name())
 

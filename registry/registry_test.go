@@ -290,7 +290,12 @@ func TestAdapterOpenAcceptsItsOwnOption(t *testing.T) {
 func TestAdapterOptionIsInterchangeableWithGogaOption(t *testing.T) {
 	// registry.Option is an alias, not a second declaration, so an option
 	// written as a goga.Option is the same type and folds with goga.Apply.
+	// Both types are spelled out on purpose: naming goga.Option here and
+	// registry.Option below is what makes the next line a compile-time proof
+	// that the alias is the same type. Inferred, the test would have no teeth.
+	//nolint:staticcheck // ST1023: the explicit type is the compile-time check.
 	var opt goga.Option[httpSettings] = withRetries(4)
+	//nolint:staticcheck // ST1023: assigning across the alias is the assertion.
 	var same registry.Option[httpSettings] = opt
 
 	s, err := goga.Apply(httpSettings{Addr: "a:1"}, same)

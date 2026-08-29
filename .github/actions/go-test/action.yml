@@ -46,7 +46,7 @@ inputs:
   artifact-name:
     description: >-
       Name of the coverage artifact. Must be unique within a workflow run, so a
-      matrix build has to vary it (e.g. coverage-${{ matrix.os }}).
+      matrix build has to vary it per leg (e.g. coverage-linux, coverage-macos).
     required: false
     default: coverage
 

@@ -1,0 +1,176 @@
+# golangci-lint configuration for goga — and the template goga ships to every
+# project that adopts it.
+#
+# Two audiences, one file. goga lints itself with exactly the rule set it asks
+# adopters to use, because a template its own author does not run is a template
+# nobody has tested. Every choice below is commented for that reason: an adopter
+# copying this file should be able to tell which rules are the house position
+# and which are merely the defaults.
+#
+# ---------------------------------------------------------------------------
+# THE TRAP, read this before editing
+# ---------------------------------------------------------------------------
+# golangci-lint silently ignores unknown keys under `settings`. A misspelled
+# rule name, a key from a different linter, a v1 key left behind in a v2 file —
+# none of them is an error. The linter simply reports zero issues and looks
+# perfectly healthy, and you find out months later that the rule you thought
+# was guarding the codebase never ran.
+#
+# So: never add a rule here and assume it works. Prove it. Write a scratch file
+# that violates the rule, run `golangci-lint run ./...`, see the finding, delete
+# the scratch file. `golangci-lint config verify` catches a *malformed* config
+# against the bundled JSON schema, which is necessary but not sufficient — it
+# validates shape, not that a rule you configured actually fires.
+#
+# The rules below were proven that way when this file was written.
+# ---------------------------------------------------------------------------
+
+version: "2"
+
+run:
+  # goga targets Go 1.27 (design D17). Telling golangci-lint the language
+  # version keeps its analyzers from suggesting rewrites that predate it.
+  go: "1.27"
+  timeout: 5m
+  # Test files are code too: the conventions this file enforces — no viper, no
+  # archived wire, no golang-migrate — apply to them as much as to the package.
+  tests: true
+
+linters:
+  # `standard` is errcheck + govet + ineffassign + staticcheck + unused. Start
+  # from it rather than from `all`: a rule set that fails on correct code gets
+  # switched off wholesale, and then none of it is enforcing anything.
+  default: standard
+  enable:
+    # The house import bans. This is the load-bearing entry in the file.
+    - depguard
+    # An error compared with == instead of errors.Is, or a type-asserted error,
+    # both break the moment anything in the chain starts wrapping. goga's own
+    # convention (CONVENTIONS.md §1.5) is that errors wrap with %w and that
+    # callers branch with errors.Is/As, so this is that convention's enforcer.
+    - errorlint
+    # A response body that is never closed leaks a connection. goga/client and
+    # goga/serve (M2, M10) will make HTTP a first-class surface; the rule is
+    # cheap and has no false positives worth the name.
+    - bodyclose
+    # An unchecked type assertion panics at runtime rather than returning an
+    # error the caller can handle.
+    - forcetypeassert
+    # A context.Context that is not the first parameter, or a struct field
+    # holding one. goga passes ctx through every surface (CONVENTIONS.md §1.4),
+    # so the shape has to hold.
+    - containedctx
+    - contextcheck
+    # The broad style linter. Its default rule set is small and uncontroversial
+    # (exported comments, naming, early returns); see `settings.revive` below,
+    # which is deliberately left at the default rather than expanded, because a
+    # revive configuration is the easiest place in this file to accumulate rules
+    # nobody proved.
+    - revive
+  settings:
+    depguard:
+      rules:
+        house:
+          # Import-path bans, not module bans. This distinction is the whole
+          # reason the rule is written this way: spf13/viper reaches goga's
+          # module graph as an *indirect* dependency of golangci-lint itself, so
+          # a module-level ban would flag a module goga never imports while
+          # still permitting the import that actually matters. depguard's `pkg`
+          # matches the import path in the source file, which is the thing being
+          # banned.
+          deny:
+            - pkg: github.com/spf13/viper
+              desc: koanf is the house configuration library — use goga/config (see .claude/rules/go-cli-koanf.md)
+            - pkg: github.com/google/wire
+              desc: archived upstream — use github.com/goforj/wire, the maintained fork
+            - pkg: github.com/golang-migrate/migrate
+              desc: goose is the house migration engine — use goga/migrate
+    errcheck:
+      # An error dropped with `_ =` is a decision someone made; an error dropped
+      # by ignoring the return value is usually an oversight. Requiring the
+      # explicit form makes the decision visible in review.
+      check-blank: true
+    govet:
+      enable:
+        # The one govet analyzer not on by default that is worth the cost: it
+        # catches a lock or a value with a Lock method being copied.
+        - copylocks
+        # A struct field tag that does not parse, which silently produces the
+        # wrong JSON key.
+        - structtag
+        # Wrong verb / wrong arity in a formatting call. goga's error convention
+        # is built on fmt.Errorf, so this guards the convention's own mechanism.
+        - printf
+
+  exclusions:
+    # `strict` means a file must carry the canonical "Code generated by ... DO
+    # NOT EDIT." line to be treated as generated. goga generates a lot (D-codegen:
+    # oapi-codegen, sqlc, wire, mockgen), and lax matching would let a
+    # hand-written file opt itself out of every rule by shape of its header.
+    generated: strict
+    # Report a `//nolint` that no longer suppresses anything. A stale
+    # suppression is the same failure mode as the unknown-key trap above: it
+    # looks like a guarded exception and is actually nothing.
+    warn-unused: true
+    rules:
+      # Test fixtures under testdata/ are inputs to a test, not code that ships.
+      # analysistest fixtures in particular are *deliberately* wrong.
+      - path: testdata/
+        linters:
+          - depguard
+          - errcheck
+          - errorlint
+          - forcetypeassert
+          - revive
+          - staticcheck
+          - unused
+
+# In v2, formatting is its own section: these do not run as linters, and
+# `golangci-lint fmt` applies them. Both, in this order — gofmt normalises the
+# code, goimports then groups and orders the import block.
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    gofmt:
+      # -s: rewrite redundant composite literals and slice expressions.
+      simplify: true
+    goimports:
+      # goga's own imports sort into their own group after the third-party one.
+      local-prefixes:
+        - github.com/gaarutyunov/goga
+
+# ---------------------------------------------------------------------------
+# goga/lint — the house analyzers
+# ---------------------------------------------------------------------------
+# The block below is COMMENTED OUT ON PURPOSE, and uncommenting it in a stock
+# golangci-lint is an error, not an improvement.
+#
+# `type: module` means the linter lives in a Go module that must be *compiled
+# into* the golangci-lint binary. The stock binary from `go install` does not
+# contain goga/lint and cannot load it; pointing this config at it makes every
+# run fail with "unable to load custom analyzer". The binary is built from
+# .custom-gcl.yml with `golangci-lint custom`, which produces ./goga-gcl.
+#
+# So the enablement lives here as a comment, and the CI job that runs the
+# custom binary is the one that turns it on. An adopting project that has built
+# the custom binary uncomments this; one that lints with the stock binary
+# leaves it alone and still gets every rule above.
+#
+#     linters:
+#       enable:
+#         - goga
+#       settings:
+#         custom:
+#           goga:
+#             type: module
+#             description: goga's house conventions — currently gogalayout (flat layout, no pkg/ and no internal/).
+#             original-url: github.com/gaarutyunov/goga
+#             settings:
+#               # The module whose layout is being checked. An adopting project
+#               # sets its own module path here. Unknown keys in this block are
+#               # rejected rather than ignored — goga/lint decodes its settings
+#               # with DisallowUnknownFields precisely because golangci-lint
+#               # itself does not.
+#               module-prefix: github.com/gaarutyunov/goga
