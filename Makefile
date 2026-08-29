@@ -21,6 +21,14 @@ COVERAGE_HTML   ?= coverage.html
 GOLANGCI        ?= golangci-lint
 DIST_DIR        ?= dist
 
+# gofmt is NOT toolchain-switched: GOTOOLCHAIN=auto redirects the `go` command
+# only, so a bare `gofmt` on PATH stays whatever the developer's installed Go
+# shipped. On goga's 1.27 floor a 1.26 gofmt cannot parse the generic methods in
+# goga/registry and fails with "method must have no type parameters" on
+# perfectly clean code. Ask the go command which toolchain it resolved and use
+# that one's gofmt, falling back to PATH if the binary is not where GOROOT says.
+GOFMT           ?= $(shell f="$$($(GO) env GOROOT)/bin/gofmt"; if [ -x "$$f" ]; then echo "$$f"; else echo gofmt; fi)
+
 # Expand BUILD_TAGS into a flag only when it is non-empty, so an empty value
 # does not turn into a bare `-tags=` that some tool versions reject.
 TAGFLAG         := $(if $(BUILD_TAGS),-tags=$(BUILD_TAGS),)
@@ -63,10 +71,10 @@ lint: fmtcheck vet ## Run the full lint suite: gofmt gate, go vet, golangci-lint
 	fi
 
 fmt: ## Rewrite every Go file with gofmt
-	gofmt -s -w $(GOFILES)
+	$(GOFMT) -s -w $(GOFILES)
 
 fmtcheck: ## Fail if any Go file is not gofmt-clean
-	@out=`gofmt -s -l $(GOFILES)`; \
+	@out=`$(GOFMT) -s -l $(GOFILES)`; \
 	if [ -n "$$out" ]; then \
 		echo 'These files are not gofmt-clean (run `make fmt`):'; \
 		echo "$$out"; \

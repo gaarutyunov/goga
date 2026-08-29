@@ -424,3 +424,28 @@ go1.27.0 and lints generic-method code at a Go 1.27 target cleanly, so
 `go-lint` uses the upstream prebuilt action. Earlier spec text describing a
 `toolchain go1.27rc2` line or an `x/tools`-bumped linter build predates GA and
 is obsolete.
+
+### 4.1 `gofmt` does not follow `GOTOOLCHAIN`
+
+`GOTOOLCHAIN=auto` re-execs the **`go` command** into the toolchain `go.mod`
+asks for. It does nothing for `gofmt`, or for any other sibling binary: those
+are separate executables, and a bare `gofmt` on `PATH` stays whatever the
+developer's *installed* Go shipped.
+
+That bites here specifically. A pre-1.27 `gofmt` cannot parse
+`goga/registry`'s generic methods and reports
+
+```
+registry/registry.go:204:28: method must have no type parameters
+```
+
+on a tree that is perfectly formatted. It is a **stale-tool** error, not a code
+error — go1.27.0's own `gofmt` prints nothing. Run the gofmt belonging to the
+toolchain the `go` command resolved:
+
+```sh
+"$(go env GOROOT)/bin/gofmt" -s -l .
+```
+
+`make fmt` / `make fmtcheck` and the `go-lint` action already do this; reach for
+the line above only when invoking `gofmt` by hand.

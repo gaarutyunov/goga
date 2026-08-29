@@ -58,6 +58,21 @@ runs:
       working-directory: ${{ inputs.working-directory }}
       run: |
         set -euo pipefail
+        # gofmt is not toolchain-switched. GOTOOLCHAIN=auto redirects the `go`
+        # command only, so a bare `gofmt` stays whatever Go installation put it
+        # on PATH — and a pre-1.27 gofmt cannot parse the generic methods this
+        # module's 1.27 floor is built on, failing with "method must have no
+        # type parameters" on a perfectly clean tree. The companion `setup-go`
+        # action happens to leave the right one first on PATH, but that is an
+        # accident of ordering and this action is meant to be reusable by
+        # projects that install Go differently. So ask the go command which
+        # toolchain it actually resolved and use that gofmt, falling back to
+        # PATH if the binary is not where GOROOT says it is.
+        GOFMT="$(go env GOROOT)/bin/gofmt"
+        if [ ! -x "$GOFMT" ]; then
+          GOFMT=gofmt
+        fi
+        echo "gofmt: using $GOFMT"
         # gofmt takes paths, not package patterns, and has no build-tag notion:
         # it parses every file it is given, so tagged files are covered here for
         # free. Skip vendor/ (not ours) and dist/ (build output).
@@ -65,7 +80,7 @@ runs:
           find . -type f -name '*.go' \
             -not -path './vendor/*' \
             -not -path './dist/*' \
-            -exec gofmt -s -l {} +
+            -exec "$GOFMT" -s -l {} +
         )"
         if [ -n "$unformatted" ]; then
           echo "::error::These files are not gofmt-clean. Run 'make fmt'."
