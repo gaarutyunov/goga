@@ -20,7 +20,7 @@ func TestPluginIsRegistered(t *testing.T) {
 
 	built, err := newPlugin(nil)
 	require.NoError(t, err)
-	// Not because any analyzer reads pass.TypesInfo, but because all three are
+	// Not because any analyzer reads pass.TypesInfo, but because all of them are
 	// scoped by pass.Pkg.Path() and golangci-lint leaves pass.Pkg nil under
 	// LoadModeSyntax — which makes every rule here report nothing at all. See
 	// plugin.GetLoadMode; dropping back to syntax mode silently disables the
@@ -32,7 +32,8 @@ func TestPluginIsRegistered(t *testing.T) {
 	require.NoError(t, err)
 
 	// One analyzer per milestone that has landed: gogalayout with M0,
-	// gogasemconv with M1, gogaserve with M2. The list is asserted in full
+	// gogasemconv with M1, gogaserve with M2, gogaconfig with M3. The list is
+	// asserted in full
 	// rather than by length so that adding a rule ahead of the package it
 	// governs — the thing D18 forbids — has to be a deliberate edit here.
 	names := make([]string, 0, len(analyzers))
@@ -40,7 +41,7 @@ func TestPluginIsRegistered(t *testing.T) {
 		names = append(names, analyzer.Name)
 		assert.NotEmpty(t, analyzer.Doc, "every analyzer documents the rule and its reason")
 	}
-	assert.Equal(t, []string{"gogalayout", "gogasemconv", "gogaserve"}, names)
+	assert.Equal(t, []string{"gogalayout", "gogasemconv", "gogaserve", "gogaconfig"}, names)
 }
 
 func TestNewSettings(t *testing.T) {

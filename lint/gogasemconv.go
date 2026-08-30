@@ -50,6 +50,7 @@ var semconvConstants = map[string]semconvConstant{
 	"ErrorTypeKey":      {semconv.ErrorTypeKey, "semconv.ErrorType(…)"},
 	"ModuleKey":         {semconv.ModuleKey, "semconv.Module(…)"},
 	"OperationKey":      {semconv.OperationKey, "semconv.Operation(…)"},
+	"ConfigSourcesKey":  {semconv.ConfigSourcesKey, "semconv.ConfigSources(…)"},
 }
 
 // semconvKeys is [semconvConstants] inverted into the lookup the analyzer

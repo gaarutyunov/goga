@@ -50,13 +50,23 @@
 // module that genuinely does wrap its tool — it simply cannot reach a
 // dependency goga deliberately stopped abstracting.
 //
+// [NewConfigAnalyzer] ("gogaconfig"), which reports project code reading the
+// process environment itself — os.Getenv, os.LookupEnv or os.Environ — outside
+// package main (M3, task 3.12). goga/config's one guarantee is that a value
+// resolves through a FIXED precedence, defaults then file then env then flags,
+// and a direct read removes the top two levels of it for that one key while
+// still compiling and still returning the right answer in the author's shell.
+// package main is exempt because a command has to read something before there
+// is any configuration to read it from; the argument for each exemption,
+// including the deliberate disagreement with gogaserve over _test.go files, is
+// in the analyzer's own doc.
+//
 // # What does not ship yet, and who owns it
 //
 // The remaining rules named by the spec, each owned by the milestone that
 // introduces the package it governs. None of these belong in this package
 // before that milestone lands.
 //
-//   - gogaconfig     — M3: os.Getenv in project code outside main.
 //   - gogadatabase   — M4, task 4.13: sql.Open / sql.OpenDB bypassing the
 //     portable type. (Replaces the gogatelemetry rule an earlier draft named.)
 //   - gogamcp        — M6, task 6.14: a call on the result of SDK().
@@ -77,11 +87,23 @@
 //     cancel() in a function returning a value the caller reads
 //     incrementally. Not yet assigned a task number.
 //
-// One rule the spec names is deliberately *not* implemented here: gogaviper
-// (an import of spf13/viper, where koanf is the house choice). It is an
-// import ban, and .golangci.yml already states it — with the two other house
-// bans — as a depguard rule. An analyzer would be a second, weaker
-// implementation of a check the shipped config already performs.
+// Two rules the spec names are deliberately *not* implemented here, because
+// both are import bans and .golangci.yml already states them as depguard
+// rules. An analyzer would be a second, weaker implementation of a check the
+// shipped config already performs.
+//
+//   - gogaviper — an import of spf13/viper, where koanf is the house choice.
+//     It sits with the two other house bans in the `house` depguard rule.
+//   - the koanf restriction M3's task 3.12 pairs with gogaconfig — an import
+//     of knadh/koanf outside goga/config. It is the `config-owns-koanf` rule,
+//     written in the same shape as `telemetry-owns-the-otel-sdk`: a files
+//     exclusion rather than an allow-list, so the rule reads as what it
+//     forbids.
+//
+// The pairing is worth reading as a whole. gogaconfig and the koanf
+// restriction cover the two different ways a project leaves the precedence
+// behind — reading the environment underneath goga/config, and building a
+// second loader beside it — and neither check can see the other's case.
 //
 // # Using the plugin
 //
@@ -151,6 +173,7 @@ func New(conf any) ([]*analysis.Analyzer, error) {
 		NewLayoutAnalyzer(settings.ModulePrefix),
 		NewSemconvAnalyzer(settings.ModulePrefix),
 		NewServeAnalyzer(settings.ModulePrefix),
+		NewConfigAnalyzer(settings.ModulePrefix),
 	}, nil
 }
 
