@@ -22,6 +22,13 @@
 # against the bundled JSON schema, which is necessary but not sufficient — it
 # validates shape, not that a rule you configured actually fires.
 #
+# One trap inside the trap, learned proving the M5 rules. golangci-lint keeps
+# only ONE issue per source line (`issues.uniq-by-line`, on by default), across
+# all linters. Two bans violated on the same line, or a ban on a line another
+# linter also reports, and one finding silently vanishes — a working rule that
+# looks like a broken one. Put each violation on its own line in the scratch
+# file, and give the linter no other reason to report that line.
+#
 # The rules below were proven that way when this file was written.
 # ---------------------------------------------------------------------------
 
@@ -123,7 +130,17 @@ linters:
               desc: koanf is the house configuration library — use goga/config (see .claude/rules/go-cli-koanf.md)
             - pkg: github.com/google/wire
               desc: archived upstream — use github.com/goforj/wire, the maintained fork
+            # The two migration engines the house has ruled against, banned
+            # OUTRIGHT rather than confined to a directory. The confinement
+            # shape below (`migrate-owns-goose`) says "only goga/migrate may
+            # build this"; these two say "nobody may build this at all", which
+            # is the stronger claim and the right one: goga/migrate does not
+            # wrap them, so there is no package that could legitimately import
+            # either. Stating it here is what turns "goose is the house
+            # engine" from a sentence in a skill into a build failure.
             - pkg: github.com/golang-migrate/migrate
+              desc: goose is the house migration engine — use goga/migrate
+            - pkg: github.com/rubenv/sql-migrate
               desc: goose is the house migration engine — use goga/migrate
         # goga/telemetry owns the OpenTelemetry SDK. A project that builds its
         # own provider stack beside goga's ends up with two TracerProviders,
@@ -188,6 +205,35 @@ linters:
             # scratch file, not assumed.
             - pkg: github.com/knadh/koanf
               desc: goga/config owns koanf — load configuration with config.Load, which applies the fixed defaults → file → env → flags precedence (Config.K and Cut(path) hand back the raw koanf handle where an adapter needs one)
+        # goga/migrate owns goose, for the same reason goga/telemetry owns the
+        # OTel SDK and goga/config owns koanf, and with the same shape. What
+        # the module guarantees is that a migration run is a single, observed,
+        # serialised thing: migrations are embedded in the binary, an advisory
+        # lock makes two replicas booting together take turns, and every step
+        # is a span. A package that drives goose directly beside it gets none
+        # of that, and gets it silently — goose applied without the lock still
+        # succeeds most of the time, which is the worst possible failure shape
+        # for a schema change.
+        #
+        # This is NOT a ban on migrations. It is a ban on a SECOND migrator:
+        # migrate.New(db) with WithFS is the supported way to run one.
+        migrate-owns-goose:
+          # `files` globs against the file's ABSOLUTE path and a leading !
+          # excludes, so the rule reads as what it forbids rather than as an
+          # allow-list — the same choice as the two rules above, and it shares
+          # their known looseness: a nested foo/migrate/ would be excluded too.
+          # That direction fails safe, since the cost is a missed report rather
+          # than a report against correct code.
+          files:
+            - "!**/migrate/**"
+          deny:
+            # An IMPORT-PATH prefix, and the prefix match is the point:
+            # `github.com/pressly/goose/v3` catches goose/v3/database,
+            # goose/v3/lock and the rest of the subpackages, which is every way
+            # a second migrator gets built. Verified by scratch file, not
+            # assumed.
+            - pkg: github.com/pressly/goose/v3
+              desc: goga/migrate owns goose — run migrations with migrate.New(db) and Up, which embeds them in the binary, takes the advisory lock and emits a span per migration
     errcheck:
       # check-blank is deliberately left off (its default). It reports `_ = f()`,
       # which is the *explicit* form — the one a reviewer can see and weigh. The

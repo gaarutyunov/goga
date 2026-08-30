@@ -95,6 +95,29 @@ const (
 	// resulting value alone. Recording the list on the load span answers it
 	// without the operator having to reproduce the environment.
 	ConfigSourcesKey = attribute.Key("goga.config.sources")
+
+	// MigrationVersionKey is goga.migration.version — the version of the one
+	// migration a goga/migrate span covers, as an integer:
+	// 20260714120000. It is set on the per-migration span
+	// [github.com/gaarutyunov/goga/migrate.Migrator.Up] opens, never on the
+	// span covering the run as a whole.
+	//
+	// The version rather than only the file name, because the version is what
+	// the version table records and what a rollback names. A backend joining
+	// goga's spans to the schema history joins on this.
+	MigrationVersionKey = attribute.Key("goga.migration.version")
+
+	// MigrationNameKey is goga.migration.name — the migration file that
+	// version came from, as goose reports its source path:
+	// "20260714120000_add_index.sql".
+	//
+	// It sits beside [MigrationVersionKey] rather than replacing it because
+	// the two answer different questions. The version identifies the row; the
+	// name is what a reader recognises, and it is the half that makes a span
+	// list readable without a lookup — which is the whole point of a span per
+	// migration. Finding the migration that takes forty seconds means reading
+	// a name off a trace, not correlating an integer against a directory.
+	MigrationNameKey = attribute.Key("goga.migration.name")
 )
 
 // The instruments goga's own telemetry records. One histogram and one counter
@@ -142,6 +165,18 @@ func Operation(op string) attribute.KeyValue { return OperationKey.String(op) }
 func ConfigSources(sources []string) attribute.KeyValue {
 	return ConfigSourcesKey.StringSlice(sources)
 }
+
+// MigrationVersion returns the goga.migration.version attribute.
+//
+// The value is an integer and not a string: a version is ordered, and a
+// backend that receives it as a string cannot sort or range over it.
+func MigrationVersion(version int64) attribute.KeyValue {
+	return MigrationVersionKey.Int64(version)
+}
+
+// MigrationName returns the goga.migration.name attribute, carrying the
+// migration's source path as goose reports it.
+func MigrationName(name string) attribute.KeyValue { return MigrationNameKey.String(name) }
 
 // ErrorType returns the error.type attribute for err, carrying err's concrete
 // Go type — "*fs.PathError", "*database.UnknownSchemeError".
