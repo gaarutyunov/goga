@@ -70,9 +70,11 @@ linters:
     # in this file to accumulate rules nobody checked.
     - revive
     # goga/lint's own analyzers — gogalayout (flat layout: no pkg/ and no
-    # internal/), gogasemconv (attribute keys come from goga/semconv) and
+    # internal/), gogasemconv (attribute keys come from goga/semconv),
     # gogaserve (HTTP is served through serve.New, not through a hand-built
-    # http.Server). COMMENTED OUT ON PURPOSE, together with the `custom:` block
+    # http.Server) and gogaconfig (the environment is read through
+    # goga/config, not with os.Getenv outside main).
+    # COMMENTED OUT ON PURPOSE, together with the `custom:` block
     # under `settings:` below. Uncomment BOTH or NEITHER.
     #
     # `type: module` means the linter is compiled *into* the golangci-lint
@@ -92,7 +94,7 @@ linters:
     # custom:
     #   goga:
     #     type: module
-    #     description: goga house conventions — gogalayout (flat layout, no pkg/ and no internal/), gogasemconv (attribute keys come from goga/semconv) and gogaserve (HTTP is served through serve.New).
+    #     description: goga house conventions — gogalayout (flat layout, no pkg/ and no internal/), gogasemconv (attribute keys come from goga/semconv), gogaserve (HTTP is served through serve.New) and gogaconfig (the environment is read through goga/config, not with os.Getenv outside main).
     #     original-url: github.com/gaarutyunov/goga
     #     settings:
     #       # The module whose layout is checked. An adopting project sets its
@@ -152,6 +154,40 @@ linters:
           deny:
             - pkg: go.opentelemetry.io/otel/sdk
               desc: goga/telemetry owns the OpenTelemetry SDK — use goga/telemetry rather than building a second provider stack (the otel API packages remain importable everywhere)
+        # goga/config owns koanf, for the same reason goga/telemetry owns the
+        # OTel SDK and with the same shape. The module's one guarantee is that
+        # configuration resolves through a FIXED precedence — defaults, file,
+        # env, flags, applied in that order inside config.Load rather than in
+        # the order the options were passed. A package that builds its own
+        # koanf beside it merges sources in ITS call order, and koanf has no
+        # precedence of its own to fall back on: whichever loader ran last
+        # wins, silently, for the keys the two happen to share. That is the
+        # exact defect this milestone exists to remove — three surveyed
+        # projects, three incompatible source arrangements, and one of them
+        # inverting its own documented precedence through a flag callback.
+        #
+        # This is NOT a ban on reading configuration. Config.K exposes the raw
+        # *koanf.Koanf and Cut(path) returns a subtree handle, so the pattern
+        # that genuinely needs koanf's own API — an adapter factory decoding
+        # its own settings subtree — is served without importing it.
+        config-owns-koanf:
+          # `files` globs against the file's ABSOLUTE path and a leading !
+          # excludes, so this reads as what it forbids rather than as an
+          # allow-list — the same choice as the telemetry rule above. The
+          # pattern is a segment match, which means a nested foo/config/ would
+          # also be excluded; that is a known looseness it shares with
+          # telemetry's, and it is the direction that fails safe, since the
+          # cost is a missed report rather than a report against correct code.
+          files:
+            - "!**/config/**"
+          deny:
+            # An IMPORT-PATH prefix, and the prefix match is the point:
+            # `github.com/knadh/koanf` catches koanf/v2 (the module every
+            # project actually imports), koanf/providers/… and koanf/parsers/…,
+            # which is every way a second loader gets built. Verified by
+            # scratch file, not assumed.
+            - pkg: github.com/knadh/koanf
+              desc: goga/config owns koanf — load configuration with config.Load, which applies the fixed defaults → file → env → flags precedence (Config.K and Cut(path) hand back the raw koanf handle where an adapter needs one)
     errcheck:
       # check-blank is deliberately left off (its default). It reports `_ = f()`,
       # which is the *explicit* form — the one a reviewer can see and weigh. The

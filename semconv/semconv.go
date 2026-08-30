@@ -71,6 +71,17 @@ const (
 	// OperationKey is goga.operation — the operation within that module, as
 	// passed to Start: "serve.Shutdown", "migrate.Up".
 	OperationKey = attribute.Key("goga.operation")
+	// ConfigSourcesKey is goga.config.sources — the configuration sources
+	// [github.com/gaarutyunov/goga/config.Load] actually merged, in the fixed
+	// order it merged them: "defaults", "file:<path>", "env:<prefix>",
+	// "flags".
+	//
+	// The order is the value's whole point. A configuration bug is almost
+	// never "the value is wrong" and almost always "a different source won
+	// than the one the operator edited", and that question is unanswerable
+	// from the resulting value alone. Recording the list on the load span
+	// answers it without the operator having to reproduce the environment.
+	ConfigSourcesKey = attribute.Key("goga.config.sources")
 )
 
 // The instruments goga's own telemetry records. One histogram and one counter
@@ -110,6 +121,12 @@ func Module(module string) attribute.KeyValue { return ModuleKey.String(module) 
 
 // Operation returns the goga.operation attribute.
 func Operation(op string) attribute.KeyValue { return OperationKey.String(op) }
+
+// ConfigSources returns the goga.config.sources attribute, carrying the
+// configuration sources in the order they were merged.
+func ConfigSources(sources []string) attribute.KeyValue {
+	return ConfigSourcesKey.StringSlice(sources)
+}
 
 // ErrorType returns the error.type attribute for err, carrying err's concrete
 // Go type — "*fs.PathError", "*database.UnknownSchemeError".

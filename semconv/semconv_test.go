@@ -23,6 +23,7 @@ func TestKeysAreStable(t *testing.T) {
 	assert.Equal(t, "error.type", string(semconv.ErrorTypeKey))
 	assert.Equal(t, "goga.module", string(semconv.ModuleKey))
 	assert.Equal(t, "goga.operation", string(semconv.OperationKey))
+	assert.Equal(t, "goga.config.sources", string(semconv.ConfigSourcesKey))
 
 	assert.Equal(t, "goga.operation.duration", semconv.OperationDurationName)
 	assert.Equal(t, "s", semconv.OperationDurationUnit)
