@@ -69,8 +69,10 @@ linters:
     # every rule in it was proven to fire — a revive block is the easiest place
     # in this file to accumulate rules nobody checked.
     - revive
-    # goga/lint's own analyzers — currently gogalayout (flat layout: no pkg/ and
-    # no internal/). COMMENTED OUT ON PURPOSE, together with the `custom:` block
+    # goga/lint's own analyzers — gogalayout (flat layout: no pkg/ and no
+    # internal/), gogasemconv (attribute keys come from goga/semconv) and
+    # gogaserve (HTTP is served through serve.New, not through a hand-built
+    # http.Server). COMMENTED OUT ON PURPOSE, together with the `custom:` block
     # under `settings:` below. Uncomment BOTH or NEITHER.
     #
     # `type: module` means the linter is compiled *into* the golangci-lint
@@ -90,7 +92,7 @@ linters:
     # custom:
     #   goga:
     #     type: module
-    #     description: goga house conventions — currently gogalayout (flat layout, no pkg/ and no internal/).
+    #     description: goga house conventions — gogalayout (flat layout, no pkg/ and no internal/), gogasemconv (attribute keys come from goga/semconv) and gogaserve (HTTP is served through serve.New).
     #     original-url: github.com/gaarutyunov/goga
     #     settings:
     #       # The module whose layout is checked. An adopting project sets its
