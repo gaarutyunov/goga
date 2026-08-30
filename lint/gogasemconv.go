@@ -45,12 +45,14 @@ type semconvConstant struct {
 // Indexing by declaration name rather than by key string is what makes that
 // test able to say which constant is missing.
 var semconvConstants = map[string]semconvConstant{
-	"ServiceNameKey":    {semconv.ServiceNameKey, "semconv.ServiceName(…)"},
-	"ServiceVersionKey": {semconv.ServiceVersionKey, "semconv.ServiceVersion(…)"},
-	"ErrorTypeKey":      {semconv.ErrorTypeKey, "semconv.ErrorType(…)"},
-	"ModuleKey":         {semconv.ModuleKey, "semconv.Module(…)"},
-	"OperationKey":      {semconv.OperationKey, "semconv.Operation(…)"},
-	"ConfigSourcesKey":  {semconv.ConfigSourcesKey, "semconv.ConfigSources(…)"},
+	"ServiceNameKey":      {semconv.ServiceNameKey, "semconv.ServiceName(…)"},
+	"ServiceVersionKey":   {semconv.ServiceVersionKey, "semconv.ServiceVersion(…)"},
+	"ErrorTypeKey":        {semconv.ErrorTypeKey, "semconv.ErrorType(…)"},
+	"ModuleKey":           {semconv.ModuleKey, "semconv.Module(…)"},
+	"OperationKey":        {semconv.OperationKey, "semconv.Operation(…)"},
+	"ConfigSourcesKey":    {semconv.ConfigSourcesKey, "semconv.ConfigSources(…)"},
+	"MigrationVersionKey": {semconv.MigrationVersionKey, "semconv.MigrationVersion(…)"},
+	"MigrationNameKey":    {semconv.MigrationNameKey, "semconv.MigrationName(…)"},
 }
 
 // semconvKeys is [semconvConstants] inverted into the lookup the analyzer
