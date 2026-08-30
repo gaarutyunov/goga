@@ -25,10 +25,17 @@ func TestPluginIsRegistered(t *testing.T) {
 
 	analyzers, err := built.BuildAnalyzers()
 	require.NoError(t, err)
-	require.Len(t, analyzers, 1,
-		"M0 ships exactly one worked analyzer; a second one arrives with the milestone that owns it (D18)")
-	assert.Equal(t, "gogalayout", analyzers[0].Name)
-	assert.NotEmpty(t, analyzers[0].Doc, "every analyzer documents the rule and its reason")
+
+	// One analyzer per milestone that has landed: gogalayout with M0,
+	// gogasemconv with M1. The list is asserted in full rather than by length
+	// so that adding a rule ahead of the package it governs — the thing D18
+	// forbids — has to be a deliberate edit here.
+	names := make([]string, 0, len(analyzers))
+	for _, analyzer := range analyzers {
+		names = append(names, analyzer.Name)
+		assert.NotEmpty(t, analyzer.Doc, "every analyzer documents the rule and its reason")
+	}
+	assert.Equal(t, []string{"gogalayout", "gogasemconv"}, names)
 }
 
 func TestNewSettings(t *testing.T) {
@@ -39,9 +46,12 @@ func TestNewSettings(t *testing.T) {
 
 		analyzers, err := New(nil)
 		require.NoError(t, err)
-		require.Len(t, analyzers, 1)
-		assert.Equal(t, DefaultModulePrefix,
-			analyzers[0].Flags.Lookup("module-prefix").Value.String())
+		require.NotEmpty(t, analyzers)
+		for _, analyzer := range analyzers {
+			assert.Equal(t, DefaultModulePrefix,
+				analyzer.Flags.Lookup("module-prefix").Value.String(),
+				"%s must fall back to the default prefix", analyzer.Name)
+		}
 	})
 
 	t.Run("a configured prefix reaches the analyzer", func(t *testing.T) {
@@ -49,9 +59,12 @@ func TestNewSettings(t *testing.T) {
 
 		analyzers, err := New(map[string]any{"module-prefix": "example.com/adopter"})
 		require.NoError(t, err)
-		require.Len(t, analyzers, 1)
-		assert.Equal(t, "example.com/adopter",
-			analyzers[0].Flags.Lookup("module-prefix").Value.String())
+		require.NotEmpty(t, analyzers)
+		for _, analyzer := range analyzers {
+			assert.Equal(t, "example.com/adopter",
+				analyzer.Flags.Lookup("module-prefix").Value.String(),
+				"the configured prefix must reach %s", analyzer.Name)
+		}
 	})
 
 	// The trap this guards: golangci-lint silently ignores unknown keys in its

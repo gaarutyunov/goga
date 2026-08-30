@@ -18,8 +18,7 @@ Which module to reach for, and who has already adopted it.
 
 | Module | When to reach for it | Entry point | Adopters |
 |---|---|---|---|
-
-_no modules have landed yet — M0 is scaffolding_
+| `goga/telemetry` | Needs traces, metrics or logs | `telemetry.Setup` once in the binary, then `telemetry.For(module)` wherever a span, a metric or a log record is produced | gopgql, then epos |
 
 ---
 
@@ -29,10 +28,21 @@ Every convention in `docs/CONVENTIONS.md` and the mechanism that enforces it.
 There is no "not enforced" column, by decision: a convention that cannot be
 enforced is a goga defect to fix, not a caveat to document.
 
+The **Where** column names the point at which the mechanism fires — compile,
+lint, test or merge — and a row whose mechanism is a test says so.
+
 | Convention | Enforced by | Where | Milestone |
 |---|---|---|---|
+| Attributes come from generated `goga/semconv` constants, never string literals | `goga/lint`'s `gogasemconv` analyzer, which reports a string-literal attribute key where a generated constant exists. The type of `Start`'s variadic argument does not help here: `attribute.String("k", v)` type-checks with a literal key, which is why this needs an analyzer rather than a signature | lint | M1 |
+| Every module resolves its instrumentation through OTel's global providers, never by snapshotting a concrete one | API shape: `telemetry.For` is the only way to obtain an `Instrumentation`, and no exported constructor takes a provider, so there is nothing to snapshot. That every module actually *holds* one rests on `TestEveryModuleIsInstrumented` — a test, not the compiler: it asserts the set of modules that called `For` is exactly the shipped package list minus the exempt set, and fails in both directions, so a later milestone can neither skip instrumenting nor quietly add an exemption | compile (API shape) + test | M1 |
+| A project does not build its own OTel provider stack beside goga's | `depguard` allows `go.opentelemetry.io/otel/sdk/...` only under `goga/telemetry`. This is the general "everything goes through goga" rule made concrete for this module: the signal APIs stay importable everywhere, the SDK that configures them does not | lint | M1 |
 
-_no modules have landed yet — M0 is scaffolding_
+**CI actions.** D18's fifth part is a composite action wherever a milestone
+introduces a tool that has to run in CI. A milestone that introduces no such
+tool records that here rather than leaving the part unmentioned.
+
+- **M1** — none new. `setup-go`, `go-lint` and `go-test` shipped at M0 and
+  cover this milestone.
 
 ---
 
