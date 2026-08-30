@@ -53,6 +53,11 @@ var semconvConstants = map[string]semconvConstant{
 	"ConfigSourcesKey":    {semconv.ConfigSourcesKey, "semconv.ConfigSources(…)"},
 	"MigrationVersionKey": {semconv.MigrationVersionKey, "semconv.MigrationVersion(…)"},
 	"MigrationNameKey":    {semconv.MigrationNameKey, "semconv.MigrationName(…)"},
+	"MCPToolNameKey":      {semconv.MCPToolNameKey, "semconv.MCPToolName(…)"},
+	"MCPSessionIDKey":     {semconv.MCPSessionIDKey, "semconv.MCPSessionID(…)"},
+	"MCPResourceURIKey":   {semconv.MCPResourceURIKey, "semconv.MCPResourceURI(…)"},
+	"MCPPromptNameKey":    {semconv.MCPPromptNameKey, "semconv.MCPPromptName(…)"},
+	"MCPTransportKey":     {semconv.MCPTransportKey, "semconv.MCPTransport(…)"},
 }
 
 // semconvKeys is [semconvConstants] inverted into the lookup the analyzer

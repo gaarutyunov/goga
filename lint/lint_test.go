@@ -32,8 +32,8 @@ func TestPluginIsRegistered(t *testing.T) {
 	require.NoError(t, err)
 
 	// One analyzer per milestone that has landed: gogalayout with M0,
-	// gogasemconv with M1, gogaserve with M2, gogaconfig with M3. The list is
-	// asserted in full
+	// gogasemconv with M1, gogaserve with M2, gogaconfig with M3, gogamcp with
+	// M6. The list is asserted in full
 	// rather than by length so that adding a rule ahead of the package it
 	// governs — the thing D18 forbids — has to be a deliberate edit here.
 	names := make([]string, 0, len(analyzers))
@@ -41,7 +41,7 @@ func TestPluginIsRegistered(t *testing.T) {
 		names = append(names, analyzer.Name)
 		assert.NotEmpty(t, analyzer.Doc, "every analyzer documents the rule and its reason")
 	}
-	assert.Equal(t, []string{"gogalayout", "gogasemconv", "gogaserve", "gogaconfig"}, names)
+	assert.Equal(t, []string{"gogalayout", "gogasemconv", "gogaserve", "gogaconfig", "gogamcp"}, names)
 }
 
 func TestNewSettings(t *testing.T) {

@@ -61,6 +61,26 @@
 // including the deliberate disagreement with gogaserve over _test.go files, is
 // in the analyzer's own doc.
 //
+// [NewMCPAnalyzer] ("gogamcp"), which reports a call on the result of SDK()
+// that registers a tool, a resource or a prompt (M6, task 6.14). It is the rule
+// M6 cannot do without, because goga/mcp's every guarantee — the span, the
+// per-tool timeout, the panic recovery — is attached by its own AddTool, and
+// the module's structure closes every route to the wrapped server except one:
+// the SDK() accessor, which is a deliberate escape hatch for the large SDK
+// surface the wrapper does not cover. Reaching for it is legitimate;
+// REGISTERING through it is the single remaining way past the instrumentation,
+// so it is the one thing the analyzer reports.
+//
+// M6's pairing is worth reading beside M3's. As gogaconfig pairs with the koanf
+// import ban, gogamcp pairs with a depguard rule confining
+// github.com/modelcontextprotocol/go-sdk to goga/mcp — and the two cover the
+// two different ways the wrapper gets left behind: a server the wrapper never
+// saw, and a tool registered on the one it did. The import ban also ends a
+// concrete drift rather than a hypothetical one: the two adopting projects were
+// pinned to two different SDK versions when M6 was written, and confining the
+// import to one package makes the version a property of goga rather than
+// something two repositories have to agree on.
+//
 // # What does not ship yet, and who owns it
 //
 // The remaining rules named by the spec, each owned by the milestone that
@@ -69,7 +89,6 @@
 //
 //   - gogadatabase   — M4, task 4.13: sql.Open / sql.OpenDB bypassing the
 //     portable type. (Replaces the gogatelemetry rule an earlier draft named.)
-//   - gogamcp        — M6, task 6.14: a call on the result of SDK().
 //   - gogacli        — M8, task 8.9: cobra.Command.Execute().
 //   - gogawire       — M9, task 9.11: a goga provider constructed outside a
 //     wire provider set.
@@ -174,6 +193,7 @@ func New(conf any) ([]*analysis.Analyzer, error) {
 		NewSemconvAnalyzer(settings.ModulePrefix),
 		NewServeAnalyzer(settings.ModulePrefix),
 		NewConfigAnalyzer(settings.ModulePrefix),
+		NewMCPAnalyzer(settings.ModulePrefix),
 	}, nil
 }
 

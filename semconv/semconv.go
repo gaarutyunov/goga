@@ -118,6 +118,50 @@ const (
 	// migration. Finding the migration that takes forty seconds means reading
 	// a name off a trace, not correlating an integer against a directory.
 	MigrationNameKey = attribute.Key("goga.migration.name")
+
+	// MCPToolNameKey is goga.mcp.tool.name — the name of the MCP tool a
+	// goga/mcp span covers, as it was registered with
+	// [github.com/gaarutyunov/goga/mcp.AddTool] and as a client names it in a
+	// tools/call request.
+	//
+	// The tool name rather than the JSON-RPC method, because every tool call
+	// arrives as the same method — "tools/call" — and an attribute that is the
+	// same for every span answers nothing. The tool name is what distinguishes
+	// one operation from another, and it is bounded by the number of tools the
+	// server registered.
+	MCPToolNameKey = attribute.Key("goga.mcp.tool.name")
+
+	// MCPSessionIDKey is goga.mcp.session.id — the id of the MCP session the
+	// request arrived on, as the SDK reports it.
+	//
+	// An MCP client holds one session across many calls, so this is the
+	// attribute that groups a conversation's spans together when the trace
+	// context did not survive the hop — which, for a client that does not send
+	// goga's traceparent in _meta, is every call.
+	MCPSessionIDKey = attribute.Key("goga.mcp.session.id")
+
+	// MCPResourceURIKey is goga.mcp.resource.uri — the URI of the resource a
+	// resources/read span covers.
+	//
+	// It is the resource's registered URI, not a per-request one: goga records
+	// the URI the handler was registered under, so a server with a bounded set
+	// of resources has a bounded set of values here.
+	MCPResourceURIKey = attribute.Key("goga.mcp.resource.uri")
+
+	// MCPPromptNameKey is goga.mcp.prompt.name — the name of the prompt a
+	// prompts/get span covers. The prompt's arguments are deliberately not
+	// recorded: they are caller-supplied text, unbounded in cardinality and
+	// routinely the part that should not be stored.
+	MCPPromptNameKey = attribute.Key("goga.mcp.prompt.name")
+
+	// MCPTransportKey is goga.mcp.transport — the plain adapter name the MCP
+	// server resolved its transport under: "stdio", "http", "sse".
+	//
+	// It is set on the resolve span rather than on every call. "Which transport
+	// did this process actually resolve" is a startup question asked once, and
+	// answering it on every tool call would multiply the cardinality of the
+	// series that matter without adding an answer.
+	MCPTransportKey = attribute.Key("goga.mcp.transport")
 )
 
 // The instruments goga's own telemetry records. One histogram and one counter
@@ -177,6 +221,21 @@ func MigrationVersion(version int64) attribute.KeyValue {
 // MigrationName returns the goga.migration.name attribute, carrying the
 // migration's source path as goose reports it.
 func MigrationName(name string) attribute.KeyValue { return MigrationNameKey.String(name) }
+
+// MCPToolName returns the goga.mcp.tool.name attribute.
+func MCPToolName(name string) attribute.KeyValue { return MCPToolNameKey.String(name) }
+
+// MCPSessionID returns the goga.mcp.session.id attribute.
+func MCPSessionID(id string) attribute.KeyValue { return MCPSessionIDKey.String(id) }
+
+// MCPResourceURI returns the goga.mcp.resource.uri attribute.
+func MCPResourceURI(uri string) attribute.KeyValue { return MCPResourceURIKey.String(uri) }
+
+// MCPPromptName returns the goga.mcp.prompt.name attribute.
+func MCPPromptName(name string) attribute.KeyValue { return MCPPromptNameKey.String(name) }
+
+// MCPTransport returns the goga.mcp.transport attribute.
+func MCPTransport(name string) attribute.KeyValue { return MCPTransportKey.String(name) }
 
 // ErrorType returns the error.type attribute for err, carrying err's concrete
 // Go type — "*fs.PathError", "*database.UnknownSchemeError".
