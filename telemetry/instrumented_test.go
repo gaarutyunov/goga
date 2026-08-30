@@ -54,6 +54,8 @@ var exemptFromInstrumentation = map[string]string{
 
 	modulePath + "/serve/servetest": "test helpers an adopting project runs against its own server. Instrumenting them would emit telemetry from the assertions rather than from the code under test, and the span recorder they install is itself the thing the assertions observe.",
 
+	modulePath + "/database/sqlcdb": "one interface declaration and three compile-time assertions, with no function bodies at all. It is the type seam sqlc's generated code compiles against; the pool that satisfies it is instrumented by goga/database/pgxdb, and there is no operation here to time.",
+
 	modulePath + "/gogatest": "test doubles and the conformance suites adapters run against. Instrumenting them would emit telemetry from the assertions rather than from the code under test (not present yet).",
 }
 

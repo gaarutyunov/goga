@@ -17,6 +17,17 @@ GO              ?= go
 BUILD_TAGS      ?=
 PKGS            ?= ./...
 COVERAGE_FILE   ?= coverage.out
+
+# The tag guarding the container-backed tests, kept separate from BUILD_TAGS on
+# purpose: `make test` must stay untagged so the fast loop never tries to start
+# a container. Mirrors INTEGRATION_BUILD_TAGS in .github/workflows/ci.yml.
+INTEGRATION_BUILD_TAGS ?= integration
+# Go's default -timeout is 10m, calibrated for unit tests. A container suite can
+# spend the first minutes of that pulling images before a test body runs, so the
+# integration budget is larger — and, unlike no timeout at all, a wedged
+# container still fails in minutes. Mirrors the CI action's default.
+INTEGRATION_TIMEOUT    ?= 15m
+INTEGRATION_COVERAGE_FILE ?= coverage-integration.out
 COVERAGE_HTML   ?= coverage.html
 GOLANGCI        ?= golangci-lint
 DIST_DIR        ?= dist
@@ -53,7 +64,7 @@ SHELL           := /bin/sh
 
 .DEFAULT_GOAL   := help
 
-.PHONY: help build test lint fmt fmtcheck vet generate tools tidy cover clean
+.PHONY: help build test test-integration lint fmt fmtcheck vet generate tools tidy cover clean
 
 # ---------------------------------------------------------------------------
 # Targets
@@ -62,15 +73,24 @@ SHELL           := /bin/sh
 help: ## Show this help
 	@echo 'goga — available targets:'
 	@echo ''
-	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-17s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 	@echo ''
-	@echo 'Variables: BUILD_TAGS, PKGS, COVERAGE_FILE (see the top of the Makefile).'
+	@echo 'Variables: BUILD_TAGS, INTEGRATION_BUILD_TAGS, INTEGRATION_TIMEOUT, PKGS,'
+	@echo '           COVERAGE_FILE (see the top of the Makefile).'
 
 build: ## Compile every package (no binaries are produced for a library)
 	$(GO) build $(TAGFLAG) $(PKGS)
 
 test: ## Run tests with the race detector and atomic coverage
 	$(GO) test $(TAGFLAG) -race -covermode=atomic -coverprofile=$(COVERAGE_FILE) $(PKGS)
+
+test-integration: ## Run the container-backed tests (needs a running Docker daemon)
+	# The local counterpart of the go-test-integration CI action, and kept in
+	# step with it: same tag, same timeout, same flags. Note that -tags is
+	# additive — the untagged tests in $(PKGS) run here too.
+	$(GO) test -tags=$(INTEGRATION_BUILD_TAGS) -race -covermode=atomic \
+		-coverprofile=$(INTEGRATION_COVERAGE_FILE) \
+		-timeout=$(INTEGRATION_TIMEOUT) $(PKGS)
 
 lint: fmtcheck vet ## Run the full lint suite: gofmt gate, go vet, golangci-lint
 	@if command -v $(GOLANGCI) >/dev/null 2>&1; then \
@@ -127,4 +147,4 @@ cover: test ## Run tests and open an HTML coverage report
 
 clean: ## Remove build and coverage output
 	$(GO) clean -cache -testcache 2>/dev/null || true
-	rm -rf $(DIST_DIR) $(COVERAGE_FILE) $(COVERAGE_HTML)
+	rm -rf $(DIST_DIR) $(COVERAGE_FILE) $(INTEGRATION_COVERAGE_FILE) $(COVERAGE_HTML)

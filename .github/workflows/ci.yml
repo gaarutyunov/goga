@@ -1,8 +1,8 @@
 # goga — continuous integration.
 #
-# This workflow is also the worked example for the three composite actions goga
-# ships: a downstream project copies this file and swaps `./.github/actions/<x>`
-# for `gaarutyunov/goga/.github/actions/<x>@<ref>`.
+# This workflow is also the worked example for the composite actions goga ships:
+# a downstream project copies this file and swaps `./.github/actions/<x>` for
+# `gaarutyunov/goga/.github/actions/<x>@<ref>`.
 name: CI
 
 on:
@@ -26,11 +26,16 @@ permissions:
   contents: read
 
 # Build tags the project keeps behind constraints. Named once and threaded into
-# both jobs, because a tagged file is invisible to the default build and would
-# otherwise be neither linted nor tested. goga has none yet; a `wireinject`
-# injector at a later milestone goes here.
+# the jobs that need them, because a tagged file is invisible to the default
+# build and would otherwise be neither linted nor tested.
 env:
+  # Tags applied to the default (untagged-suite) jobs. goga has none yet; a
+  # `wireinject` injector at a later milestone goes here.
   BUILD_TAGS: ""
+  # The tag guarding the container-backed tests. Kept out of BUILD_TAGS on
+  # purpose: the unit job must stay untagged so that `make test` and the fast CI
+  # leg never try to start a container.
+  INTEGRATION_BUILD_TAGS: integration
 
 jobs:
   lint:
@@ -62,3 +67,38 @@ jobs:
         uses: ./.github/actions/go-test
         with:
           build-tags: ${{ env.BUILD_TAGS }}
+
+  integration:
+    name: Integration test
+    # Gated on the two cheap jobs rather than run beside them. This is the only
+    # expensive leg — it pulls container images and runs a container-backed
+    # suite under -race, minutes where the others take seconds — and its result
+    # is uninterpretable when the module does not even compile or its unit tests
+    # are red. `lint` and `test` still run in parallel with each other, so the
+    # cost of the gate is one short job's wall-clock; the saving on a broken PR
+    # is the whole integration run. Reverse this to run it in parallel if
+    # feedback latency ever matters more than runner minutes.
+    needs: [lint, test]
+    runs-on: ubuntu-latest
+    # Restates the workflow default rather than inheriting it, so the job with
+    # the largest blast radius (it runs arbitrary containers) states its scope
+    # where a reader looking at it will see it.
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: ./.github/actions/setup-go
+
+      # No Docker setup step: ubuntu-latest ships a running Docker daemon,
+      # which is all testcontainers-go asks for.
+      - name: Integration test
+        uses: ./.github/actions/go-test-integration
+        with:
+          build-tags: ${{ env.INTEGRATION_BUILD_TAGS }}
+          # `packages` is left at ./..., which means the untagged tests run here
+          # a second time — `-tags` only makes files visible, it does not
+          # deselect the rest. That redundancy is seconds; the alternative is a
+          # hand-maintained package list that goes stale the first time a new
+          # package grows a container test and then silently stops running it.
