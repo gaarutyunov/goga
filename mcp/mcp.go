@@ -116,10 +116,6 @@ type Settings interface {
 	// [WithName].
 	ServerName() string
 
-	// ServerVersion is the version the server advertises, as given to
-	// [WithVersion].
-	ServerVersion() string
-
 	// ToolTimeout bounds one tool call, as given to [WithToolTimeout].
 	ToolTimeout() time.Duration
 

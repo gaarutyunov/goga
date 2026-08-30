@@ -83,9 +83,6 @@ func (s *settings) serverOptions() *sdkmcp.ServerOptions {
 // ServerName implements [Settings].
 func (s *settings) ServerName() string { return s.name }
 
-// ServerVersion implements [Settings].
-func (s *settings) ServerVersion() string { return s.version }
-
 // ToolTimeout implements [Settings].
 func (s *settings) ToolTimeout() time.Duration { return s.toolTimeout }
 
