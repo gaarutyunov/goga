@@ -79,8 +79,9 @@ linters:
     # goga/lint's own analyzers — gogalayout (flat layout: no pkg/ and no
     # internal/), gogasemconv (attribute keys come from goga/semconv),
     # gogaserve (HTTP is served through serve.New, not through a hand-built
-    # http.Server) and gogaconfig (the environment is read through
-    # goga/config, not with os.Getenv outside main).
+    # http.Server), gogaconfig (the environment is read through goga/config,
+    # not with os.Getenv outside main) and gogamcp (tools are registered
+    # through goga/mcp, not on the server SDK() hands back).
     # COMMENTED OUT ON PURPOSE, together with the `custom:` block
     # under `settings:` below. Uncomment BOTH or NEITHER.
     #
@@ -101,7 +102,7 @@ linters:
     # custom:
     #   goga:
     #     type: module
-    #     description: goga house conventions — gogalayout (flat layout, no pkg/ and no internal/), gogasemconv (attribute keys come from goga/semconv), gogaserve (HTTP is served through serve.New) and gogaconfig (the environment is read through goga/config, not with os.Getenv outside main).
+    #     description: goga house conventions — gogalayout (flat layout, no pkg/ and no internal/), gogasemconv (attribute keys come from goga/semconv), gogaserve (HTTP is served through serve.New), gogaconfig (the environment is read through goga/config, not with os.Getenv outside main) and gogamcp (MCP tools are registered through goga/mcp, not on the server SDK() hands back).
     #     original-url: github.com/gaarutyunov/goga
     #     settings:
     #       # The module whose layout is checked. An adopting project sets its
@@ -234,6 +235,73 @@ linters:
             # assumed.
             - pkg: github.com/pressly/goose/v3
               desc: goga/migrate owns goose — run migrations with migrate.New(db) and Up, which embeds them in the binary, takes the advisory lock and emits a span per migration
+        # goga/mcp owns the Model Context Protocol SDK, for the same reason
+        # goga/telemetry owns the OTel SDK and with the same shape — plus one
+        # this module has that the others do not.
+        #
+        # The shared reason: what goga/mcp guarantees is that every tool the
+        # process serves runs inside a span, under a per-tool timeout, and
+        # behind a panic recovery. All three are attached by the wrapper's own
+        # AddTool. A package that builds a second, unwrapped SDK server beside
+        # goga's gets none of them, and gets nothing else wrong either — the
+        # tools work, and the absence shows up as a request that never returns
+        # or a process that dies on one bad input.
+        #
+        # The reason specific to M6: this rule ends a version drift
+        # STRUCTURALLY rather than by asking two repositories to agree. The two
+        # projects adopting goga/mcp were pinned to two different SDK versions
+        # when it was written — gopgql to v1.6.1, mcp-anything to v1.4.1 — and
+        # a pre-1.0-in-spirit protocol SDK is exactly the dependency where that
+        # gap turns into two incompatible behaviours nobody chose. With the
+        # import confined to one package, the version is a property of goga's
+        # go.mod: a project upgrades by upgrading goga, and there is no second
+        # pin for it to disagree with.
+        #
+        # The other half of this job is goga/lint's `gogamcp` analyzer, which
+        # reports a registration made through the SDK() escape hatch. The two
+        # cover the two different ways the wrapper gets left behind — a server
+        # the wrapper never saw, and a tool registered on the one it did — and
+        # neither can see the other's case. This ban does NOT subsume the
+        # analyzer: the types a registration needs can reach a file through an
+        # alias, a local declaration or a helper's return value, so
+        # `s.SDK().AddTool(…)` is writable with goga/mcp as the file's only
+        # import.
+        #
+        # THE KNOWN EDGE, recorded rather than discovered later. M6's own
+        # correction reads *a wrapper may not ban what it does not wrap*, and
+        # goga/mcp wraps the SDK's server rather than its whole vocabulary: a
+        # few of its exported signatures still NAME SDK types, so a project
+        # using one of them has to import the path this rule denies. The list
+        # as shipped is `PromptFunc`, whose handlers return
+        # `[]*sdkmcp.PromptMessage`; `WithToolAnnotations` and
+        # `WithPromptArguments`; `WithClientTransport`; and the `Transport`
+        # interface, whose Serve takes a `*sdkmcp.Server`. Nothing in goga
+        # outside `mcp/` imports the SDK today, so the rule is green here and
+        # the cost falls on an adopter reaching one of those five. Until
+        # goga/mcp re-exports them, that import is the case for a
+        # `//nolint:depguard` with a reason — the visible exception this file
+        # prefers to a ban quietly dropped.
+        mcp-owns-the-protocol-sdk:
+          # `files` globs against the file's ABSOLUTE path and a leading !
+          # excludes, so the rule reads as what it forbids rather than as an
+          # allow-list — the same choice as the three rules above, and it
+          # shares their known looseness: a nested foo/mcp/ would be excluded
+          # too. That direction fails safe, since the cost is a missed report
+          # rather than a report against correct code.
+          files:
+            - "!**/mcp/**"
+          deny:
+            # An IMPORT-PATH prefix, and the prefix match is the point:
+            # `github.com/modelcontextprotocol/go-sdk` catches go-sdk/mcp
+            # along with go-sdk/auth, go-sdk/jsonrpc and go-sdk/oauthex, which
+            # is every way a second server gets built. Verified by scratch
+            # file against v1.7.0's actual package list, not assumed — the
+            # first draft of this comment named a go-sdk/jsonschema that does
+            # not exist. It is also what makes the rule survive the SDK's next
+            # major version, whose import path gains a /v2 that a per-package
+            # ban would have missed.
+            - pkg: github.com/modelcontextprotocol/go-sdk
+              desc: goga/mcp owns the MCP SDK — build the server with mcp.New and register with mcp.AddTool, mcp.AddResource and mcp.AddPrompt, which take a name, a description and a plain Go function and attach the span, the per-tool timeout and the panic recovery
     errcheck:
       # check-blank is deliberately left off (its default). It reports `_ = f()`,
       # which is the *explicit* form — the one a reviewer can see and weigh. The

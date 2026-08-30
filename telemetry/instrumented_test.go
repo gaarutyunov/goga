@@ -57,6 +57,10 @@ var exemptFromInstrumentation = map[string]string{
 	modulePath + "/database/sqlcdb": "one interface declaration and three compile-time assertions, with no function bodies at all. It is the type seam sqlc's generated code compiles against; the pool that satisfies it is instrumented by goga/database/pgxdb, and there is no operation here to time.",
 
 	modulePath + "/gogatest": "test doubles and the conformance suites adapters run against. Instrumenting them would emit telemetry from the assertions rather than from the code under test (not present yet).",
+
+	modulePath + "/mcp/httptransport": "a transport adapter. goga/mcp instruments the tool call, the resource read and the prompt render before a transport is reached, and the listener it runs on is goga/serve's, which instruments the HTTP hop; a span here would be a second span for one operation (design D6: instrumentation lives in the portable type, never in the adapter).",
+
+	modulePath + "/mcp/ssetransport": "a transport adapter, for the same reason as goga/mcp/httptransport beside it: the operation is already traced by goga/mcp's wrapper and the hop by goga/serve's listener, so the only span this package could add is a duplicate of one of them.",
 }
 
 // TestEveryModuleIsInstrumented is checklist item 1.11: every goga module that
