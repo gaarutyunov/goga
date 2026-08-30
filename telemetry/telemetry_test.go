@@ -74,11 +74,11 @@ func TestCleanupFlushesRecordedTelemetry(t *testing.T) {
 	_, span := tel.Tracer.Start(t.Context(), "before-cleanup")
 	span.End()
 
-	require.Empty(t, spans.GetSpans(), "the batch processor has not flushed yet")
+	require.Empty(t, spans.All(), "the batch processor has not flushed yet")
 
 	cleanup()
 
-	assert.Contains(t, spanNames(spans), "before-cleanup",
+	assert.Contains(t, spans.Names(), "before-cleanup",
 		"the cleanup returned by Setup flushed the batched span")
 }
 
@@ -91,9 +91,9 @@ func TestShutdownJoinsEveryProviderError(t *testing.T) {
 	errSpans := errors.New("the span processor is broken")
 
 	tel := &Telemetry{
-		LoggerProvider: sdklog.NewLoggerProvider(sdklog.WithProcessor(failingLogProcessor{err: errLogs})),
+		LoggerProvider: sdklog.NewLoggerProvider(sdklog.WithProcessor(newFailingLogProcessor(t, errLogs))),
 		MeterProvider:  sdkmetric.NewMeterProvider(),
-		TracerProvider: sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(failingSpanProcessor{err: errSpans})),
+		TracerProvider: sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(newFailingSpanProcessor(t, errSpans))),
 	}
 
 	err := tel.Shutdown(t.Context())
@@ -214,7 +214,7 @@ func TestResourceAttributesReachExportedSpans(t *testing.T) {
 	span.End()
 	require.NoError(t, tel.TracerProvider.ForceFlush(t.Context()))
 
-	stubs := spans.GetSpans()
+	stubs := spans.All()
 	require.NotEmpty(t, stubs)
 
 	attrs := stubs[0].Resource.Attributes()

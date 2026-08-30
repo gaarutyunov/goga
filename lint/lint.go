@@ -21,12 +21,18 @@
 //
 // # What ships today
 //
-// One analyzer, [NewLayoutAnalyzer] ("gogalayout"), which enforces goga's own
-// flat layout (task 0.2). It is here rather than in a later milestone because
-// it is the one rule M0 itself can already violate: it governs the repository
-// M0 creates, so M0 is its milestone. Tasks 11.1 and 11.2 group it with
+// [NewLayoutAnalyzer] ("gogalayout"), which enforces goga's own flat layout
+// (task 0.2). It is here rather than in a later milestone because it is the
+// one rule M0 itself can already violate: it governs the repository M0
+// creates, so M0 is its milestone. Tasks 11.1 and 11.2 group it with
 // gogaparamstruct as "cross-cutting, not attributable to a module"; with the
 // analyzer shipped here, 11.2 becomes a verification rather than new work.
+//
+// [NewSemconvAnalyzer] ("gogasemconv"), which reports an attribute key written
+// as a string literal where goga/semconv already declares a constant for it
+// (M1, task 1.15). It arrives with M1 exactly as D18 requires: goga/semconv is
+// the package whose one rule is "never write the key at the point of use", and
+// this is that rule's mechanism rather than a second statement of it.
 //
 // # What does not ship yet, and who owns it
 //
@@ -34,8 +40,6 @@
 // introduces the package it governs. None of these belong in this package
 // before that milestone lands.
 //
-//   - gogasemconv    — M1, task 1.15: a string-literal attribute key instead
-//     of a goga/semconv constant.
 //   - gogaserve      — M2, task 2.14: a direct http.Server literal.
 //   - gogaconfig     — M3: os.Getenv in project code outside main.
 //   - gogadatabase   — M4, task 4.13: sql.Open / sql.OpenDB bypassing the
@@ -107,8 +111,10 @@ func init() {
 // only way a misconfiguration here is visible.
 type Settings struct {
 	// ModulePrefix is the import-path prefix of the module being linted. It
-	// scopes gogalayout to the module's own packages; see [NewLayoutAnalyzer].
-	// Empty means [DefaultModulePrefix].
+	// scopes every analyzer here to the module's own packages, so that a
+	// dependency's layout and a dependency's attribute keys are never
+	// reported; see [NewLayoutAnalyzer] and [NewSemconvAnalyzer]. Empty means
+	// [DefaultModulePrefix].
 	ModulePrefix string `json:"module-prefix"`
 }
 
@@ -122,8 +128,13 @@ func New(conf any) ([]*analysis.Analyzer, error) {
 		return nil, fmt.Errorf("goga/lint: decoding %q plugin settings: %w", Name, err)
 	}
 
+	// Both analyzers take the same module prefix: it answers the same question
+	// for each of them — which packages belong to the module under analysis —
+	// and a second setting spelling the same module path twice is a second
+	// place for an adopting project to get it half right.
 	return []*analysis.Analyzer{
 		NewLayoutAnalyzer(settings.ModulePrefix),
+		NewSemconvAnalyzer(settings.ModulePrefix),
 	}, nil
 }
 
@@ -142,8 +153,10 @@ func (p *plugin) BuildAnalyzers() ([]*analysis.Analyzer, error) {
 
 // GetLoadMode reports that these analyzers need syntax only, never type
 // information. golangci-lint sets pass.Pkg from the package path even in
-// syntax mode, which is all gogalayout reads; keeping the load mode at syntax
-// is what makes the plugin free to run. An analyzer added here that genuinely
-// needs types must raise this to register.LoadModeTypesInfo for the whole
-// plugin, so weigh that before adding one.
+// syntax mode, which is all gogalayout reads, and gogasemconv resolves the
+// attribute package from the file's own import block rather than from
+// pass.TypesInfo for the same reason; keeping the load mode at syntax is what
+// makes the plugin free to run. An analyzer added here that genuinely needs
+// types must raise this to register.LoadModeTypesInfo for the whole plugin,
+// so weigh that before adding one.
 func (p *plugin) GetLoadMode() string { return register.LoadModeSyntax }

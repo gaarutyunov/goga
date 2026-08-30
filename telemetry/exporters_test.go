@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/gaarutyunov/goga/registry"
 )
@@ -93,7 +92,7 @@ func TestCustomExporterFromRegistryIsUsed(t *testing.T) {
 	require.NoError(t, tel.TracerProvider.ForceFlush(t.Context()))
 	require.NoError(t, tel.MeterProvider.ForceFlush(t.Context()))
 
-	assert.Contains(t, spanNames(spans), "custom-exporter")
+	assert.Contains(t, spans.Names(), "custom-exporter")
 	_, ok := metrics.find("goga.test.counter")
 	assert.True(t, ok, "the registered metric exporter received the recorded metric")
 }
@@ -104,9 +103,9 @@ func TestCustomExporterFromRegistryIsUsed(t *testing.T) {
 // collide with it.
 func TestRegistryNameTakesPrecedenceOverStandardName(t *testing.T) {
 	r := registry.New(noDecode)
-	spans := tracetest.NewInMemoryExporter()
+	exporter, spans := newSpanExporter(t)
 	require.NoError(t, RegisterTraceExporter(r, exporterConsole,
-		func(context.Context, exporterSettings) (sdktrace.SpanExporter, error) { return spans, nil }))
+		func(context.Context, exporterSettings) (sdktrace.SpanExporter, error) { return exporter, nil }))
 
 	tel, cleanup, err := Setup(t.Context(),
 		WithExporterRegistry(r),
@@ -122,7 +121,7 @@ func TestRegistryNameTakesPrecedenceOverStandardName(t *testing.T) {
 	span.End()
 	require.NoError(t, tel.TracerProvider.ForceFlush(t.Context()))
 
-	assert.Contains(t, spanNames(spans), "shadowed",
+	assert.Contains(t, spans.Names(), "shadowed",
 		"the registered exporter won, and nothing was printed to stdout")
 }
 
@@ -130,8 +129,9 @@ func TestRegistryNameTakesPrecedenceOverStandardName(t *testing.T) {
 // startup code, where an error can be reported.
 func TestDuplicateExporterNameIsAnErrorNotAPanic(t *testing.T) {
 	r := registry.New(noDecode)
+	exporter, _ := newSpanExporter(t)
 	ctor := func(context.Context, exporterSettings) (sdktrace.SpanExporter, error) {
-		return tracetest.NewInMemoryExporter(), nil
+		return exporter, nil
 	}
 
 	require.NoError(t, RegisterTraceExporter(r, "twice", ctor))
@@ -154,8 +154,9 @@ func TestSameNameForDifferentSignals(t *testing.T) {
 }
 
 func TestRegisterExporterRejectsBadArguments(t *testing.T) {
+	exporter, _ := newSpanExporter(t)
 	ctor := func(context.Context, exporterSettings) (sdktrace.SpanExporter, error) {
-		return tracetest.NewInMemoryExporter(), nil
+		return exporter, nil
 	}
 
 	t.Run("nil registry", func(t *testing.T) {

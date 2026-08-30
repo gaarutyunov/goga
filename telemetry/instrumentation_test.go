@@ -43,7 +43,7 @@ func TestForResolvesProvidersLazily(t *testing.T) {
 	end(nil)
 	require.NoError(t, tel.TracerProvider.ForceFlush(t.Context()))
 
-	assert.Contains(t, spanNames(spans), "goga.lazyprobe.afterSetup",
+	assert.Contains(t, spans.Names(), "goga.lazyprobe.afterSetup",
 		"a handle taken before Setup emits through the providers Setup installed")
 }
 
@@ -90,7 +90,7 @@ func TestStartRecordsStatusDurationAndErrorType(t *testing.T) {
 
 	t.Run("the span carries the status and the module attributes", func(t *testing.T) {
 		byName := map[string]codes.Code{}
-		for _, s := range spans.GetSpans() {
+		for _, s := range spans.All() {
 			byName[s.Name] = s.Status.Code
 		}
 
@@ -100,7 +100,7 @@ func TestStartRecordsStatusDurationAndErrorType(t *testing.T) {
 		assert.Equal(t, codes.Error, byName["goga.recordprobe.fails"],
 			"the closer observed the error, not a nil the return expression computed")
 
-		for _, s := range spans.GetSpans() {
+		for _, s := range spans.All() {
 			if s.Name != "goga.recordprobe.fails" {
 				continue
 			}
@@ -175,7 +175,7 @@ func TestStartCloserIsIdempotent(t *testing.T) {
 	require.NoError(t, tel.TracerProvider.ForceFlush(t.Context()))
 	require.NoError(t, tel.MeterProvider.ForceFlush(t.Context()))
 
-	assert.Len(t, spans.GetSpans(), 1)
+	assert.Len(t, spans.All(), 1)
 	if m, ok := metrics.find(semconv.OperationErrorsName); ok {
 		sum, isSum := m.Data.(metricdata.Sum[int64])
 		require.True(t, isSum)
@@ -198,7 +198,7 @@ func TestStartSpanStaysReachableThroughTheContext(t *testing.T) {
 
 	require.NoError(t, tel.TracerProvider.ForceFlush(t.Context()))
 
-	stubs := spans.GetSpans()
+	stubs := spans.All()
 	require.Len(t, stubs, 1)
 	assert.Contains(t, stubs[0].Attributes, semconv.Operation("adjusted"))
 }
@@ -214,7 +214,7 @@ func TestStartAttributesReachTheSpan(t *testing.T) {
 	end(nil)
 	require.NoError(t, tel.TracerProvider.ForceFlush(t.Context()))
 
-	stubs := spans.GetSpans()
+	stubs := spans.All()
 	require.Len(t, stubs, 1)
 	assert.Contains(t, stubs[0].Attributes, semconv.ServiceName("caller-supplied"))
 }

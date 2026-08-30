@@ -121,6 +121,35 @@ linters:
               desc: archived upstream — use github.com/goforj/wire, the maintained fork
             - pkg: github.com/golang-migrate/migrate
               desc: goose is the house migration engine — use goga/migrate
+        # goga/telemetry owns the OpenTelemetry SDK. A project that builds its
+        # own provider stack beside goga's ends up with two TracerProviders,
+        # two shutdown paths and two resources, and the spans it emits land in
+        # whichever one the global happened to be set to last — a failure that
+        # shows up as missing telemetry rather than as an error.
+        #
+        # The api half (go.opentelemetry.io/otel, /trace, /metric, /log,
+        # /attribute) is deliberately NOT banned: instrumenting code is what
+        # every package here is supposed to do. It is the SDK — the
+        # construction half — that belongs to one place.
+        telemetry-owns-the-otel-sdk:
+          # An IMPORT-PATH prefix again, and the prefix match is the point:
+          # `go.opentelemetry.io/otel/sdk` catches sdk/trace, sdk/metric,
+          # sdk/log and sdk/resource, which is every way a provider stack gets
+          # built. Verified by scratch file, not assumed.
+          #
+          # `files` is a list of glob patterns against the file's absolute
+          # path, and a leading ! excludes. Excluding telemetry/ rather than
+          # allow-listing it keeps the rule stated as what it forbids. The
+          # pattern covers telemetry/'s test files too: the mocks under
+          # telemetry/ are generated against sdk interfaces (mock_spanexporter_test.go
+          # and friends), and every other sdk import in the repository today is
+          # in that same directory — checked before the ban was written, so it
+          # is not banning anything correct.
+          files:
+            - "!**/telemetry/**"
+          deny:
+            - pkg: go.opentelemetry.io/otel/sdk
+              desc: goga/telemetry owns the OpenTelemetry SDK — use goga/telemetry rather than building a second provider stack (the otel API packages remain importable everywhere)
     errcheck:
       # check-blank is deliberately left off (its default). It reports `_ = f()`,
       # which is the *explicit* form — the one a reviewer can see and weigh. The

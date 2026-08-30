@@ -375,13 +375,11 @@ func Setup(ctx context.Context, opts ...Option) (t *Telemetry, cleanup func(), e
 	}
 
 	// contextcheck sees a context.Background() reachable from a function that
-	// has a ctx and objects. It is wrong here, and the alternatives are worse:
-	// deriving the cleanup context from ctx would make the flush inherit the
-	// cancellation of a context that is guaranteed to be dead by the time
-	// cleanup runs, and context.WithoutCancel would keep the request-scoped
-	// values — including a span context — and file the process's shutdown under
-	// whatever trace happened to call Setup.
-	return t, newCleanup(t, s.shutdownTimeout), nil //nolint:contextcheck // the cleanup outlives ctx by construction; see newCleanup.
+	// has a ctx, and objects. It is wrong here, and it is the one place in this
+	// module where it is: the cleanup's signature is func(), the only shape wire
+	// recognises, so there is no context parameter to pass it, and the flush has
+	// to survive a ctx that is already cancelled. See newCleanup.
+	return t, newCleanup(t, s.shutdownTimeout), nil //nolint:contextcheck // cleanup is func() per the wire cleanup shape and must flush after ctx is dead; see newCleanup.
 }
 
 // newCleanup builds the func() [Setup] returns.
