@@ -285,8 +285,10 @@ The conclusions of a read of `gocloud.dev` at commit `35f55f24`, applied.
 
 ### 3.1 One module, one package per module, one package per adapter
 
-goga is **one** Go module, `github.com/gaarutyunov/goga`. Not one module per
-adapter — the release tax of the multi-module layout is real and measurable,
+goga is **one** Go module, `github.com/gaarutyunov/goga`. (The single exception
+is `tools/`, which carries the code generators, has no Go source and is never in
+a consumer's module graph — see §3.5 for why that split is mandatory.) Not one
+module per adapter — the release tax of the multi-module layout is real and measurable,
 and Go's module graph pruning already gives the property that matters:
 
 **A project that does not import an adapter does not compile it and does not
@@ -393,6 +395,77 @@ asked or not.
 
 A port with one implementation deliberately gets **no** suite. A conformance
 suite for one implementation is pure cost.
+
+### 3.5 Code generators live in `tools/`, never in the root `go.mod`
+
+goga's generators — `buf`, `wire`, `oapi-codegen`, `goose`, `sqlc`, `mockgen` —
+are `tool` directives in **`tools/go.mod`**, a nested module with no Go source
+and no importable package. Do not move them back into the root `go.mod`, and do
+not add a new generator there instead. This is the one place §3.1's "goga is one
+module" is qualified, and it is qualified for a reason.
+
+**A `tool` directive is a module requirement, and requirements propagate.** The
+tool's whole dependency tree is merged into the module graph of the module that
+declares it, and from there into the module graph of everything that depends on
+*that* module. Consumers do not see this in their own `go.mod` — the `require`
+block stays clean, which is precisely why the leak survives review. It shows up
+in `go list -m all`, and in MVS raising versions the consumer never asked for.
+
+Measured on a throwaway module importing nothing but `goga/config`, with the six
+directives in the root `go.mod`, `go list -m all` reported **279** modules —
+including `github.com/bufbuild/buf`, `github.com/sqlc-dev/sqlc`,
+`github.com/google/cel-go`, `github.com/getkin/kin-openapi` and
+`github.com/speakeasy-api/jsonpath`. With them in `tools/`: **147**, and not one
+of those five. The consumer's own `go.mod` was byte-identical either way, which
+is the whole trap — `go list -m all` is the only view that shows it.
+
+That is not a tidiness argument. Two consumer breakages came out of it directly:
+
+- **`cel-go` v0.29.2** (via buf) changed `interpreter.NewCall` to take
+  `[]InterpretableV2`. No released Caddy compiles against v0.29, so
+  mcp-anything's `pkg/caddy` stopped building. The local workaround —
+  `exclude github.com/google/cel-go v0.29.2` — does not help mcp-anything's own
+  consumers, because `exclude` and `replace` apply **only from the main module**.
+- **`speakeasy-api/jsonpath` v0.6.3** (via oapi-codegen) dropped `pkg/overlay`,
+  which `speakeasy-api/openapi-overlay`'s tests import, so `go mod tidy` failed
+  for every module depending on mcp-anything. There was no local workaround at
+  all.
+
+Note the asymmetry that makes this worth a rule rather than a code review: the
+module that declares the tool can always paper over the damage with `exclude` or
+`replace`; the consumers three hops down cannot.
+
+**What stays in the root.** A tool's *library* is a normal dependency and belongs
+in the root `go.mod` when goga's own code imports it. `go.uber.org/mock` is the
+live example: `telemetry`'s generated doubles import `go.uber.org/mock/gomock`,
+so the module is a direct requirement — while `go.uber.org/mock/mockgen`, the
+binary that writes them, is a tool directive in `tools/`. The two are separable
+and the split is the point.
+
+**How a generator is invoked.** Not with `go tool <name>`: the root module has no
+tool directives, so `go tool mockgen` reports `no such tool`. And not by running
+the generator from inside `tools/` either — mockgen and wire load the *target*
+packages, and inside `tools/` those do not resolve. Instead:
+
+```sh
+make tools      # go -C tools install tool  →  ./bin/{buf,goose,mockgen,oapi-codegen,sqlc,wire}
+make generate   # ./bin on PATH, then `go generate ./...` in the root module
+```
+
+`make generate` depends on `make tools`, so one command is enough. `//go:generate`
+lines therefore name the **bare binary** (`//go:generate mockgen …`), which is
+also what makes them work for a contributor who has the generator installed
+globally. A bare `go generate ./...` with an empty `PATH` will not find them —
+use `make generate`.
+
+`make tidy` tidies and verifies both modules. When you change a generator's
+version, do it in `tools/go.mod`; the root `go.sum` must not move.
+
+**Weaver is the exception that is not one.** OTel Weaver ships as a Rust binary;
+`github.com/open-telemetry/weaver` has no `cmd/weaver` package, so it cannot be a
+`tool` directive in either module. `semconv`'s `//go:generate weaver …` line
+records the invocation and expects the binary out of band — `make generate` fails
+on that package until it is installed, by design.
 
 ---
 

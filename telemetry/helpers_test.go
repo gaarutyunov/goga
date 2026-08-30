@@ -1,9 +1,9 @@
 package telemetry
 
-//go:generate go tool mockgen -destination mock_spanexporter_test.go -package telemetry go.opentelemetry.io/otel/sdk/trace SpanExporter
-//go:generate go tool mockgen -destination mock_spanprocessor_test.go -package telemetry go.opentelemetry.io/otel/sdk/trace SpanProcessor
-//go:generate go tool mockgen -destination mock_logprocessor_test.go -package telemetry go.opentelemetry.io/otel/sdk/log Processor
-//go:generate go tool mockgen -destination mock_metricexporter_test.go -package telemetry go.opentelemetry.io/otel/sdk/metric Exporter
+//go:generate mockgen -destination mock_spanexporter_test.go -package telemetry go.opentelemetry.io/otel/sdk/trace SpanExporter
+//go:generate mockgen -destination mock_spanprocessor_test.go -package telemetry go.opentelemetry.io/otel/sdk/trace SpanProcessor
+//go:generate mockgen -destination mock_logprocessor_test.go -package telemetry go.opentelemetry.io/otel/sdk/log Processor
+//go:generate mockgen -destination mock_metricexporter_test.go -package telemetry go.opentelemetry.io/otel/sdk/metric Exporter
 
 import (
 	"context"
