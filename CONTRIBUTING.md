@@ -10,11 +10,13 @@ so they are the thing that survives the tool being replaced — which is the
 whole premise of the framework.
 
 ```
-make test    # go test ./... with -race and atomic coverage
-make lint    # gofmt gate, go vet, golangci-lint
+make test      # go test ./... with -race and atomic coverage
+make lint      # gofmt gate, go vet, golangci-lint
+make generate  # build the tools/ generators into ./bin, then go generate ./...
 ```
 
-Both must be green before a pull request is opened, and both run again in CI.
+`make test` and `make lint` must be green before a pull request is opened, and
+both run again in CI.
 Integration tests use testcontainers against the real dependency; there are no
 recorded-and-replayed fixtures.
 
@@ -61,5 +63,9 @@ mechanism that enforces it and the row in `docs/SKILL.md` that names it.
   name.
 - One issue is one deliverable. Do not split it into sub-issues.
 - Pull request body contains **`Closes #<N>`**.
-- Keep generated code committed and current: `go generate ./...` followed by a
-  clean `git diff` is a merge gate, not a suggestion.
+- Keep generated code committed and current: **`make generate`** followed by a
+  clean `git diff` is a merge gate, not a suggestion. It is `make generate`, not
+  a bare `go generate ./...`: the generators are `tool` directives of the nested
+  `tools/` module (they must not be in the root `go.mod` — see
+  [`docs/CONVENTIONS.md` §3.5](docs/CONVENTIONS.md)), and `make generate` is what
+  builds them into `./bin` and puts them on `PATH`.

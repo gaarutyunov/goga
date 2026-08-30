@@ -26,6 +26,18 @@ matters: a project that does not import an adapter does not compile it and does
 not carry its dependency in its build list. The multi-module alternative buys
 the same isolation and charges a release tax for it.
 
+`tools/` is the one exception, and it is not an adapter: it is a nested module
+with **no Go source and no importable package**, holding nothing but the `tool`
+directives for the code generators (`buf`, `wire`, `oapi-codegen`, `goose`,
+`sqlc`, `mockgen`). They cannot live in the root `go.mod`, because a `tool`
+directive is a module *requirement* and requirements propagate — with them in
+the root, a project importing only `goga/config` resolved buf's and sqlc's
+dependency trees and had cel-go and `speakeasy-api/jsonpath` forced into its
+build list, breaking real consumers. Its own `go.mod` looked clean the whole
+time. Run the generators with `make generate` (which builds them into `./bin`
+first); do not tidy them back into the root. The full account is
+[`docs/CONVENTIONS.md` §3.5](docs/CONVENTIONS.md).
+
 ## Go version
 
 `go.mod` says **`go 1.27`**, with no `toolchain` directive.

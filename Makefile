@@ -21,6 +21,17 @@ COVERAGE_HTML   ?= coverage.html
 GOLANGCI        ?= golangci-lint
 DIST_DIR        ?= dist
 
+# The code generators live in their own module (tools/go.mod) rather than in
+# `tool` directives in the root go.mod. That is not cosmetic: a tool directive
+# is a module *requirement*, and a requirement propagates into every consumer's
+# module graph — buf alone drags cel-go and sqlc into projects that import
+# nothing but goga/config. See tools/go.mod for the full account. The cost of
+# the split is this indirection: the generators are built into TOOLS_BIN and
+# put on PATH, because a generator has to resolve its target packages against
+# the *root* module, so it cannot simply be run from inside tools/.
+TOOLS_DIR       ?= tools
+TOOLS_BIN       ?= $(CURDIR)/bin
+
 # gofmt is NOT toolchain-switched: GOTOOLCHAIN=auto redirects the `go` command
 # only, so a bare `gofmt` on PATH stays whatever the developer's installed Go
 # shipped. On goga's 1.27 floor a 1.26 gofmt cannot parse the generic methods in
@@ -84,18 +95,30 @@ fmtcheck: ## Fail if any Go file is not gofmt-clean
 vet: ## Run go vet
 	$(GO) vet $(TAGFLAG) $(PKGS)
 
-generate: ## Run every code generator (go:generate directives)
-	# Generators are pinned as `tool` directives in go.mod and invoked from
-	# `//go:generate go tool <name>` lines, so `go generate` covers all of them
-	# and no generator has to be installed globally. See `make tools`.
-	$(GO) generate $(TAGFLAG) $(PKGS)
+generate: tools ## Run every code generator (go:generate directives)
+	# `//go:generate <name>` lines name the bare binary, not `go tool <name>`:
+	# the generators are not tool directives of this module any more. `tools`
+	# above put them in $(TOOLS_BIN), and prepending that to PATH is what makes
+	# them resolvable — while `go generate` still runs in the root module, so a
+	# generator that loads packages (mockgen, wire) resolves them correctly.
+	PATH='$(TOOLS_BIN)':"$$PATH" $(GO) generate $(TAGFLAG) $(PKGS)
 
-tools: ## List the generators pinned as go.mod tool directives
-	$(GO) tool
+tools: ## Build the pinned code generators from $(TOOLS_DIR) into $(TOOLS_BIN)
+	@if [ ! -f '$(TOOLS_DIR)/go.mod' ]; then \
+		echo 'No $(TOOLS_DIR)/go.mod — this project pins no generators.'; \
+		exit 0; \
+	fi; \
+	echo 'building generators from $(TOOLS_DIR) into $(TOOLS_BIN)'; \
+	GOBIN='$(TOOLS_BIN)' $(GO) -C '$(TOOLS_DIR)' install tool
 
-tidy: ## Tidy and verify go.mod / go.sum
+tidy: ## Tidy and verify go.mod / go.sum, in the root module and in $(TOOLS_DIR)
 	$(GO) mod tidy
 	$(GO) mod verify
+	@if [ -f '$(TOOLS_DIR)/go.mod' ]; then \
+		echo 'tidying $(TOOLS_DIR)'; \
+		$(GO) -C '$(TOOLS_DIR)' mod tidy; \
+		$(GO) -C '$(TOOLS_DIR)' mod verify; \
+	fi
 
 cover: test ## Run tests and open an HTML coverage report
 	$(GO) tool cover -func=$(COVERAGE_FILE) | tail -n 1
