@@ -34,13 +34,28 @@
 // the package whose one rule is "never write the key at the point of use", and
 // this is that rule's mechanism rather than a second statement of it.
 //
+// [NewServeAnalyzer] ("gogaserve"), which reports project code that constructs
+// an http.Server itself or calls http.ListenAndServe (M2, task 2.14). It is
+// the rule with something to enforce precisely because M2 narrowed the port to
+// http.Handler: goga no longer wraps a router, so the only thing left to get
+// wrong is the listener — and getting it wrong silently loses the bounded
+// timeouts and the graceful drain that are the whole of what serve.New adds.
+//
+// M2 is also where an earlier draft had the enforcement backwards, and the
+// correction generalises: it proposed depguard bans on gin-gonic/gin and
+// go-chi/chi. With the port at http.Handler those routers are no longer
+// wrapped, so a project's handler imports gin legitimately and the ban would
+// have fired on correct code. A WRAPPER MAY NOT BAN WHAT IT DOES NOT WRAP. The
+// owner's "we don't use direct dependencies" position is unchanged for every
+// module that genuinely does wrap its tool — it simply cannot reach a
+// dependency goga deliberately stopped abstracting.
+//
 // # What does not ship yet, and who owns it
 //
 // The remaining rules named by the spec, each owned by the milestone that
 // introduces the package it governs. None of these belong in this package
 // before that milestone lands.
 //
-//   - gogaserve      — M2, task 2.14: a direct http.Server literal.
 //   - gogaconfig     — M3: os.Getenv in project code outside main.
 //   - gogadatabase   — M4, task 4.13: sql.Open / sql.OpenDB bypassing the
 //     portable type. (Replaces the gogatelemetry rule an earlier draft named.)
@@ -128,13 +143,14 @@ func New(conf any) ([]*analysis.Analyzer, error) {
 		return nil, fmt.Errorf("goga/lint: decoding %q plugin settings: %w", Name, err)
 	}
 
-	// Both analyzers take the same module prefix: it answers the same question
+	// Every analyzer takes the same module prefix: it answers the same question
 	// for each of them — which packages belong to the module under analysis —
 	// and a second setting spelling the same module path twice is a second
 	// place for an adopting project to get it half right.
 	return []*analysis.Analyzer{
 		NewLayoutAnalyzer(settings.ModulePrefix),
 		NewSemconvAnalyzer(settings.ModulePrefix),
+		NewServeAnalyzer(settings.ModulePrefix),
 	}, nil
 }
 
@@ -151,12 +167,30 @@ func (p *plugin) BuildAnalyzers() ([]*analysis.Analyzer, error) {
 	return New(p.conf)
 }
 
-// GetLoadMode reports that these analyzers need syntax only, never type
-// information. golangci-lint sets pass.Pkg from the package path even in
-// syntax mode, which is all gogalayout reads, and gogasemconv resolves the
-// attribute package from the file's own import block rather than from
-// pass.TypesInfo for the same reason; keeping the load mode at syntax is what
-// makes the plugin free to run. An analyzer added here that genuinely needs
-// types must raise this to register.LoadModeTypesInfo for the whole plugin,
-// so weigh that before adding one.
-func (p *plugin) GetLoadMode() string { return register.LoadModeSyntax }
+// GetLoadMode reports that golangci-lint must type-check a package before
+// running these analyzers. Not one of them reads pass.TypesInfo — each resolves
+// the packages it cares about from the file's own import block, deliberately —
+// but every one of them is SCOPED by pass.Pkg.Path(), and that is what forces
+// the mode.
+//
+// An earlier revision of this comment claimed the opposite: that "golangci-lint
+// sets pass.Pkg from the package path even in syntax mode". It does not. In
+// v2.13.2, runner_loadingpackage.go returns from the syntax path *before*
+// `pkg.Types = types.NewPackage(pkg.PkgPath, pkg.Name)`, so under
+// register.LoadModeSyntax pass.Pkg is nil, every analyzer here takes its
+// `if pass.Pkg == nil` guard on the first line, and the plugin reports zero
+// issues while looking perfectly healthy.
+//
+// That is the trap .golangci.yml documents at the top of the file, reached by a
+// different route — and it survived M0 and M1 because analysistest does not
+// exercise this path (it always type-checks) and CI runs the stock binary,
+// which cannot load the plugin at all. The only way to catch it is to build the
+// custom binary and watch a rule fire:
+//
+//	golangci-lint custom && ./bin/goga-gcl run ./...
+//
+// Do that after any change here. Raising the mode costs effectively nothing:
+// the shipped config enables staticcheck, govet and revive, every one of which
+// needs type information anyway, so the package is type-checked regardless of
+// what this plugin asks for.
+func (p *plugin) GetLoadMode() string { return register.LoadModeTypesInfo }

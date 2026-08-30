@@ -20,22 +20,27 @@ func TestPluginIsRegistered(t *testing.T) {
 
 	built, err := newPlugin(nil)
 	require.NoError(t, err)
-	assert.Equal(t, register.LoadModeSyntax, built.GetLoadMode(),
-		"these analyzers read the package path only; needing type info would be a design change")
+	// Not because any analyzer reads pass.TypesInfo, but because all three are
+	// scoped by pass.Pkg.Path() and golangci-lint leaves pass.Pkg nil under
+	// LoadModeSyntax — which makes every rule here report nothing at all. See
+	// plugin.GetLoadMode; dropping back to syntax mode silently disables the
+	// whole plugin, so it is pinned here rather than left to be rediscovered.
+	assert.Equal(t, register.LoadModeTypesInfo, built.GetLoadMode(),
+		"LoadModeSyntax leaves pass.Pkg nil, which disables every analyzer in this plugin")
 
 	analyzers, err := built.BuildAnalyzers()
 	require.NoError(t, err)
 
 	// One analyzer per milestone that has landed: gogalayout with M0,
-	// gogasemconv with M1. The list is asserted in full rather than by length
-	// so that adding a rule ahead of the package it governs — the thing D18
-	// forbids — has to be a deliberate edit here.
+	// gogasemconv with M1, gogaserve with M2. The list is asserted in full
+	// rather than by length so that adding a rule ahead of the package it
+	// governs — the thing D18 forbids — has to be a deliberate edit here.
 	names := make([]string, 0, len(analyzers))
 	for _, analyzer := range analyzers {
 		names = append(names, analyzer.Name)
 		assert.NotEmpty(t, analyzer.Doc, "every analyzer documents the rule and its reason")
 	}
-	assert.Equal(t, []string{"gogalayout", "gogasemconv"}, names)
+	assert.Equal(t, []string{"gogalayout", "gogasemconv", "gogaserve"}, names)
 }
 
 func TestNewSettings(t *testing.T) {

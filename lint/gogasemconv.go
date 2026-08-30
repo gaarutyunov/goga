@@ -263,35 +263,10 @@ func stringLiteral(expr ast.Expr) (string, bool) {
 // attribute package — normally just "attribute", but an alias is legal and a
 // file may import the package twice under two names.
 //
-// A dot-import is deliberately not handled. It would make every bare String(…)
-// call in the file a candidate, and distinguishing goga's from the file's own
-// needs the type information this plugin does not load. A dot-import of
-// attribute is also something revive's dot-imports rule already reports, so the
-// case cannot arise in a project running this config.
+// A dot-import is deliberately not handled; see [importedPackageNames], which
+// does the work and states why.
 func attributePackageNames(file *ast.File) map[string]bool {
-	var names map[string]bool
-
-	for _, spec := range file.Imports {
-		path, err := strconv.Unquote(spec.Path.Value)
-		if err != nil || path != attributeImportPath {
-			continue
-		}
-
-		name := "attribute" // the package's own name, used when there is no alias
-		if spec.Name != nil {
-			if spec.Name.Name == "_" || spec.Name.Name == "." {
-				continue
-			}
-			name = spec.Name.Name
-		}
-
-		if names == nil {
-			names = make(map[string]bool, 1)
-		}
-		names[name] = true
-	}
-
-	return names
+	return importedPackageNames(file, attributeImportPath, "attribute")
 }
 
 // skipPackage reports whether pkgPath is outside this rule's remit: another

@@ -50,6 +50,10 @@ var exemptFromInstrumentation = map[string]string{
 
 	modulePath + "/app": "the composition root. It starts the surfaces and shuts them down, and each of those is instrumented by its own module; a span around the whole process lifetime would duplicate them (M8, not present yet).",
 
+	modulePath + "/serve/driver": "port declarations only — two interfaces and an options struct, with no function bodies at all. There is no operation to time and nothing to record; the listener that implements them is instrumented by goga/serve, once, on the handler it is handed.",
+
+	modulePath + "/serve/servetest": "test helpers an adopting project runs against its own server. Instrumenting them would emit telemetry from the assertions rather than from the code under test, and the span recorder they install is itself the thing the assertions observe.",
+
 	modulePath + "/gogatest": "test doubles and the conformance suites adapters run against. Instrumenting them would emit telemetry from the assertions rather than from the code under test (not present yet).",
 }
 
