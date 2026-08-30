@@ -72,15 +72,28 @@ const (
 	// passed to Start: "serve.Shutdown", "migrate.Up".
 	OperationKey = attribute.Key("goga.operation")
 	// ConfigSourcesKey is goga.config.sources — the configuration sources
-	// [github.com/gaarutyunov/goga/config.Load] actually merged, in the fixed
-	// order it merged them: "defaults", "file:<path>", "env:<prefix>",
-	// "flags".
+	// [github.com/gaarutyunov/goga/config.Load] actually merged, as an ordered
+	// string slice: "defaults", "file:<path>", "env:<prefix>", "flags".
 	//
-	// The order is the value's whole point. A configuration bug is almost
-	// never "the value is wrong" and almost always "a different source won
-	// than the one the operator edited", and that question is unanswerable
-	// from the resulting value alone. Recording the list on the load span
-	// answers it without the operator having to reproduce the environment.
+	// # The order is the house order, not the option order
+	//
+	// goga/config merges sources in one fixed sequence — defaults, then files,
+	// then the environment, then flags — with each beating the ones before it.
+	// That sequence is written into Load. It is NOT the order the WithFile,
+	// WithEnv and WithFlags options were passed, it is not configurable, and
+	// no option can change it; passing WithEnv before WithFile is the same
+	// program as passing them the other way round.
+	//
+	// So this slice reports precedence, lowest first, filtered to the sources
+	// that actually contributed — an optional file that was not there is
+	// absent from it. A reader comparing two loads is comparing which sources
+	// were present, never which order somebody wrote the options in.
+	//
+	// That is the value's whole point. A configuration bug is almost never
+	// "the value is wrong" and almost always "a different source won than the
+	// one the operator edited", and that question is unanswerable from the
+	// resulting value alone. Recording the list on the load span answers it
+	// without the operator having to reproduce the environment.
 	ConfigSourcesKey = attribute.Key("goga.config.sources")
 )
 
@@ -123,7 +136,9 @@ func Module(module string) attribute.KeyValue { return ModuleKey.String(module) 
 func Operation(op string) attribute.KeyValue { return OperationKey.String(op) }
 
 // ConfigSources returns the goga.config.sources attribute, carrying the
-// configuration sources in the order they were merged.
+// configuration sources in the fixed house order they were merged in —
+// lowest precedence first. See [ConfigSourcesKey]: the order is goga's, not
+// the caller's.
 func ConfigSources(sources []string) attribute.KeyValue {
 	return ConfigSourcesKey.StringSlice(sources)
 }
