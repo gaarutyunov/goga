@@ -1,0 +1,142 @@
+# goga — reusable "lint a Go module" composite action.
+#
+# Downstream projects pin this as:
+#   uses: gaarutyunov/goga/.github/actions/go-lint@<ref>
+#
+# Three gates, cheapest first, so a formatting slip fails in seconds rather than
+# after a full lint pass:
+#   1. gofmt   — formatting is not negotiable and needs no configuration.
+#   2. go vet  — the toolchain's own correctness checks.
+#   3. golangci-lint — the project's configured rule set (.golangci.yml).
+name: Go lint
+description: >-
+  Run the gofmt gate, go vet and golangci-lint over a Go module. Assumes a Go
+  toolchain is already on PATH — run the companion `setup-go` action first; this
+  action deliberately does not install Go so the version stays decided in one
+  place.
+
+inputs:
+  build-tags:
+    description: >-
+      Comma-separated build tags, passed through to EVERY step.
+
+      This is load-bearing, not a convenience. A file behind a constraint such as
+      `//go:build wireinject` is excluded from the default build, which means go
+      vet and golangci-lint never load it and it ships completely unlinted. Name
+      the tag here and the generated wire injector (and anything else behind a
+      tag) gets the same scrutiny as the rest of the tree.
+    required: false
+    default: ""
+  golangci-version:
+    description: >-
+      golangci-lint release to install. v2.13.2 is built with go1.27.0 and lints
+      a Go 1.27 target cleanly; older v2 patches predate the 1.27 std lib and
+      report spurious findings.
+    required: false
+    default: v2.13.2
+  working-directory:
+    description: Directory to lint, relative to the repository root.
+    required: false
+    default: "."
+  args:
+    description: Extra flags appended to the golangci-lint invocation.
+    required: false
+    default: ""
+  skip-gofmt:
+    description: >-
+      Skip the gofmt gate. Only set this true if golangci-lint is configured with
+      a formatter that already enforces gofmt, to avoid reporting it twice.
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: gofmt gate
+      if: inputs.skip-gofmt != 'true'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        set -euo pipefail
+        # gofmt is not toolchain-switched. GOTOOLCHAIN=auto redirects the `go`
+        # command only, so a bare `gofmt` stays whatever Go installation put it
+        # on PATH — and a pre-1.27 gofmt cannot parse the generic methods this
+        # module's 1.27 floor is built on, failing with "method must have no
+        # type parameters" on a perfectly clean tree. The companion `setup-go`
+        # action happens to leave the right one first on PATH, but that is an
+        # accident of ordering and this action is meant to be reusable by
+        # projects that install Go differently. So ask the go command which
+        # toolchain it actually resolved and use that gofmt, falling back to
+        # PATH if the binary is not where GOROOT says it is.
+        GOFMT="$(go env GOROOT)/bin/gofmt"
+        if [ ! -x "$GOFMT" ]; then
+          GOFMT=gofmt
+        fi
+        echo "gofmt: using $GOFMT"
+        # gofmt takes paths, not package patterns, and has no build-tag notion:
+        # it parses every file it is given, so tagged files are covered here for
+        # free. Skip vendor/ (not ours) and dist/ (build output).
+        unformatted="$(
+          find . -type f -name '*.go' \
+            -not -path './vendor/*' \
+            -not -path './dist/*' \
+            -exec "$GOFMT" -s -l {} +
+        )"
+        if [ -n "$unformatted" ]; then
+          echo "::error::These files are not gofmt-clean. Run 'make fmt'."
+          echo "$unformatted" | while read -r f; do
+            echo "::error file=$f::not gofmt-clean"
+          done
+          exit 1
+        fi
+        echo "gofmt: clean"
+
+    - name: go vet
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      # Inputs travel through env rather than being interpolated into the script
+      # body: a `${{ }}` expansion inside `run:` is a script-injection hole when
+      # the value is attacker-controlled (a branch name, a PR title).
+      env:
+        GOGA_BUILD_TAGS: ${{ inputs.build-tags }}
+      run: |
+        set -euo pipefail
+        # Build an empty-safe -tags flag: a bare `-tags=` is rejected by some
+        # toolchain versions, so the flag is omitted entirely when unset.
+        if [ -n "$GOGA_BUILD_TAGS" ]; then
+          echo "go vet -tags=$GOGA_BUILD_TAGS ./..."
+          go vet "-tags=$GOGA_BUILD_TAGS" ./...
+        else
+          echo "go vet ./..."
+          go vet ./...
+        fi
+
+    - name: Resolve golangci-lint arguments
+      id: args
+      shell: bash
+      env:
+        GOGA_BUILD_TAGS: ${{ inputs.build-tags }}
+        GOGA_EXTRA_ARGS: ${{ inputs.args }}
+      run: |
+        set -euo pipefail
+        args=""
+        # Same tag list as go vet above — a rule set that sees fewer files than
+        # the compiler is a rule set with a hole in it.
+        if [ -n "$GOGA_BUILD_TAGS" ]; then
+          args="--build-tags=$GOGA_BUILD_TAGS"
+        fi
+        if [ -n "$GOGA_EXTRA_ARGS" ]; then
+          args="$args $GOGA_EXTRA_ARGS"
+        fi
+        echo "value=$args" >> "$GITHUB_OUTPUT"
+        echo "golangci-lint args: ${args:-(none)}"
+
+    - name: golangci-lint
+      # The upstream prebuilt action is used rather than a hand-rolled install:
+      # it handles the binary cache, the analysis cache and the inline PR
+      # annotations. SHA-pinned, same policy as every other third-party action.
+      uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+      with:
+        version: ${{ inputs.golangci-version }}
+        working-directory: ${{ inputs.working-directory }}
+        args: ${{ steps.args.outputs.value }}

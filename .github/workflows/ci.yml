@@ -1,0 +1,64 @@
+# goga — continuous integration.
+#
+# This workflow is also the worked example for the three composite actions goga
+# ships: a downstream project copies this file and swaps `./.github/actions/<x>`
+# for `gaarutyunov/goga/.github/actions/<x>@<ref>`.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Without this group every commit on a PR runs CI twice — once for `push` and
+# once for `pull_request`. `github.ref` cannot dedupe them, because it differs
+# between the two events (refs/heads/<branch> vs refs/pull/<n>/merge). The pair
+# below resolves to the same string for both: `github.head_ref` is set only on
+# pull_request and holds the source branch, `github.ref_name` is the branch on
+# push. This exact expression is the point.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+# Least privilege: CI only reads the repository. Any job that needs more should
+# raise it at the job level, never here.
+permissions:
+  contents: read
+
+# Build tags the project keeps behind constraints. Named once and threaded into
+# both jobs, because a tagged file is invisible to the default build and would
+# otherwise be neither linted nor tested. goga has none yet; a `wireinject`
+# injector at a later milestone goes here.
+env:
+  BUILD_TAGS: ""
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: ./.github/actions/setup-go
+        # No `go-version`: the action derives it from go.mod, so CI and the
+        # module can never disagree about the toolchain.
+
+      - name: Lint
+        uses: ./.github/actions/go-lint
+        with:
+          build-tags: ${{ env.BUILD_TAGS }}
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: ./.github/actions/setup-go
+
+      - name: Test
+        uses: ./.github/actions/go-test
+        with:
+          build-tags: ${{ env.BUILD_TAGS }}

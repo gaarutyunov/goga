@@ -1,0 +1,106 @@
+# goga — GoReleaser configuration.
+#
+# goga is a library today: `go get github.com/gaarutyunov/goga` is the whole
+# distribution story, and the Go module proxy serves it straight from the git
+# tag. GoReleaser is here for the release notes and the checksum/SBOM story, and
+# so the config is already in place when the `goga` CLI arrives at M8 — at which
+# point the commented-out `builds` block below is uncommented and the `skip`
+# stanza deleted.
+#
+# This file doubles as the template goga ships; the comments explain the choices
+# rather than restating the schema.
+version: 2
+
+project_name: goga
+
+before:
+  hooks:
+    # Fail early on a dirty module graph rather than halfway through a release.
+    - go mod tidy
+    - go mod verify
+
+builds:
+  # No main package exists yet. `skip: true` is GoReleaser's documented way to
+  # say "library, nothing to compile" — without it the run fails looking for a
+  # main package. Delete this entry and uncomment the block below at M8.
+  - skip: true
+
+  # --- The `goga` CLI, arriving at M8. ------------------------------------
+  # - id: goga
+  #   main: ./cmd/goga
+  #   binary: goga
+  #   env:
+  #     - CGO_ENABLED=0
+  #   goos: [linux, darwin, windows]
+  #   goarch: [amd64, arm64]
+  #   # Reproducible builds: pin the timestamp to the commit, not to now.
+  #   mod_timestamp: "{{ .CommitTimestamp }}"
+  #   flags:
+  #     - -trimpath
+  #   ldflags:
+  #     - -s -w
+  #     - -X main.version={{ .Version }}
+  #     - -X main.commit={{ .Commit }}
+  #     - -X main.date={{ .CommitDate }}
+  # ------------------------------------------------------------------------
+
+# A snapshot is what `goreleaser release --snapshot` produces off an untagged
+# tree; the `-next` suffix makes it obvious the artifact is not a real release.
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  # `github` asks GitHub to compute the commit range; it handles merge commits
+  # and force-pushed branches better than walking git locally.
+  use: github
+  sort: asc
+
+  filters:
+    # Churn that no consumer of the changelog cares about. Anchored to the
+    # conventional-commit prefix so a commit merely mentioning "docs" survives.
+    exclude:
+      - "^docs?(\\(.+\\))?:"
+      - "^test(\\(.+\\))?:"
+      - "^chore(\\(.+\\))?:"
+      - "^ci(\\(.+\\))?:"
+      - "^style(\\(.+\\))?:"
+      - "^build(\\(.+\\))?:"
+      - "^Merge (branch|pull request)"
+      - "(?i)typo"
+
+  # Conventional-commit groups, ordered the way a reader wants them: what
+  # breaks, then what is new, then what is fixed.
+  groups:
+    - title: Breaking changes
+      regexp: '^.*?[a-zA-Z0-9_]+(\(.+\))?!:.*$'
+      order: 0
+    - title: Features
+      regexp: '^.*?feat(\(.+\))?!?:.+$'
+      order: 1
+    - title: Bug fixes
+      regexp: '^.*?fix(\(.+\))?!?:.+$'
+      order: 2
+    - title: Performance
+      regexp: '^.*?perf(\(.+\))?!?:.+$'
+      order: 3
+    - title: Refactors
+      regexp: '^.*?refactor(\(.+\))?!?:.+$'
+      order: 4
+    - title: Other
+      order: 999
+
+release:
+  # Published straight away: a library release that sits in draft is a release
+  # the module proxy has already served anyway.
+  draft: false
+  # A tag containing a prerelease identifier (v1.2.0-rc.1) is marked prerelease;
+  # anything else is not.
+  prerelease: auto
+  # Nothing to attach for a library — the module proxy is the artifact store.
+  # Delete this once the CLI ships binaries worth uploading.
+  disable: false
+  footer: |
+
+    ---
+
+    Install: `go get github.com/gaarutyunov/goga@{{ .Tag }}`
